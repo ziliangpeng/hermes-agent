@@ -3030,6 +3030,16 @@ class HermesCLI:
             return "class:status-bar-warn"
         return "class:status-bar-dim"
 
+    def _memory_label_style(self, snapshot: Dict[str, Any]) -> str:
+        """Color memory/user label by max(memory%, user%) of their caps."""
+        max_pct = 0
+        for chars_key, limit_key in (("memory_chars", "memory_limit"), ("user_chars", "user_limit")):
+            limit = snapshot.get(limit_key) or 0
+            chars = snapshot.get(chars_key) or 0
+            if limit:
+                max_pct = max(max_pct, round((chars / limit) * 100))
+        return self._status_bar_context_style(max_pct)
+
     def _build_context_bar(self, percent_used: Optional[int], width: int = 10) -> str:
         safe_percent = max(0, min(100, percent_used or 0))
         filled = round((safe_percent / 100) * width)
@@ -3108,10 +3118,25 @@ class HermesCLI:
             "session_total_tokens": 0,
             "session_api_calls": 0,
             "compressions": 0,
+            "memory_chars": None,
+            "memory_limit": None,
+            "user_chars": None,
+            "user_limit": None,
         }
 
         if not agent:
             return snapshot
+
+        # Curated memory + user-profile usage (for status-bar MEM/USR segment)
+        try:
+            store = getattr(agent, "_memory_store", None)
+            if store is not None:
+                snapshot["memory_chars"] = store._char_count("memory")
+                snapshot["memory_limit"] = store.memory_char_limit
+                snapshot["user_chars"] = store._char_count("user")
+                snapshot["user_limit"] = store.user_char_limit
+        except Exception:
+            pass
 
         snapshot["session_input_tokens"] = getattr(agent, "session_input_tokens", 0) or 0
         snapshot["session_output_tokens"] = getattr(agent, "session_output_tokens", 0) or 0
@@ -3133,6 +3158,39 @@ class HermesCLI:
                 snapshot["context_percent"] = max(0, min(100, round((context_tokens / context_length) * 100)))
 
         return snapshot
+
+    @staticmethod
+    def _format_memory_count_compact(value: int) -> str:
+        """Compact char count for status bar: 8800 -> '8.8k', 234 -> '234'."""
+        if value is None:
+            return "--"
+        try:
+            v = int(value)
+        except Exception:
+            return "--"
+        if v < 1000:
+            return str(v)
+        # one decimal for <100k, integer beyond
+        if v < 100_000:
+            return f"{v/1000:.1f}k"
+        return f"{v//1000}k"
+
+    def _build_memory_label(self, snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render 'MEM 8.8k/8.8k · USR 5.5k/5.5k' if memory_store is wired up."""
+        if snapshot.get("memory_limit") is None and snapshot.get("user_limit") is None:
+            return None
+        parts = []
+        if snapshot.get("memory_limit"):
+            parts.append(
+                f"MEM {self._format_memory_count_compact(snapshot.get('memory_chars', 0))}"
+                f"/{self._format_memory_count_compact(snapshot['memory_limit'])}"
+            )
+        if snapshot.get("user_limit"):
+            parts.append(
+                f"USR {self._format_memory_count_compact(snapshot.get('user_chars', 0))}"
+                f"/{self._format_memory_count_compact(snapshot['user_limit'])}"
+            )
+        return " · ".join(parts) if parts else None
 
     @staticmethod
     def _status_bar_display_width(text: str) -> int:
@@ -3361,6 +3419,9 @@ class HermesCLI:
             parts = [f"⚕ {snapshot['model_short']}", context_label, percent_label]
             if compressions:
                 parts.append(f"🗜️ {compressions}")
+            mem_label = self._build_memory_label(snapshot)
+            if mem_label:
+                parts.append(mem_label)
             parts.append(duration_label)
             prompt_elapsed = snapshot.get("prompt_elapsed")
             if prompt_elapsed:
@@ -3441,6 +3502,10 @@ class HermesCLI:
                     if compressions:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append((self._compression_count_style(compressions), f"🗜️ {compressions}"))
+                    mem_label = self._build_memory_label(snapshot)
+                    if mem_label:
+                        frags.append(("class:status-bar-dim", " │ "))
+                        frags.append((self._memory_label_style(snapshot), mem_label))
                     frags.extend([
                         ("class:status-bar-dim", " │ "),
                         ("class:status-bar-dim", duration_label),
