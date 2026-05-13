@@ -3122,6 +3122,7 @@ class HermesCLI:
             "memory_limit": None,
             "user_chars": None,
             "user_limit": None,
+            "skill_count": None,
         }
 
         if not agent:
@@ -3131,10 +3132,35 @@ class HermesCLI:
         try:
             store = getattr(agent, "_memory_store", None)
             if store is not None:
+                # Re-read disk if MEMORY.md / USER.md changed out-of-band
+                # (e.g. user/tooling edited the file directly). System prompt
+                # snapshot stays frozen — only the live state updates so the
+                # status bar reflects current disk reality.
+                if hasattr(store, "refresh_live_from_disk"):
+                    try:
+                        store.refresh_live_from_disk()
+                    except Exception:
+                        pass
                 snapshot["memory_chars"] = store._char_count("memory")
                 snapshot["memory_limit"] = store.memory_char_limit
                 snapshot["user_chars"] = store._char_count("user")
                 snapshot["user_limit"] = store.user_char_limit
+        except Exception:
+            pass
+
+        # Skill count (for status-bar SKL segment) — counts SKILL.md files
+        # across local + external skill dirs. Cheap directory walk; the
+        # prompt-builder already does this work and caches it, so this is
+        # effectively free on subsequent renders.
+        try:
+            from agent.skill_utils import get_all_skills_dirs, iter_skill_index_files
+            total = 0
+            for sdir in get_all_skills_dirs():
+                if not sdir.exists():
+                    continue
+                for _ in iter_skill_index_files(sdir, "SKILL.md"):
+                    total += 1
+            snapshot["skill_count"] = total
         except Exception:
             pass
 
@@ -3191,6 +3217,18 @@ class HermesCLI:
                 f"/{self._format_memory_count_compact(snapshot['user_limit'])}"
             )
         return " · ".join(parts) if parts else None
+
+    @staticmethod
+    def _build_skills_label(snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render 'SKL <count>' if skill_count is available.
+
+        Counts all SKILL.md files across the local skills dir and any
+        configured external dirs. None for non-CLI callers / pre-init.
+        """
+        n = snapshot.get("skill_count")
+        if n is None:
+            return None
+        return f"SKL {n}"
 
     @staticmethod
     def _status_bar_display_width(text: str) -> int:
@@ -3422,6 +3460,14 @@ class HermesCLI:
             mem_label = self._build_memory_label(snapshot)
             if mem_label:
                 parts.append(mem_label)
+            # Skill count is useful, but lower priority than compression/memory
+            # indicators. Only render it on genuinely wide terminals so it
+            # doesn't push the existing styled fragments into the overflow
+            # fallback (which would collapse per-segment styles).
+            if width >= 100:
+                skl_label = self._build_skills_label(snapshot)
+                if skl_label:
+                    parts.append(skl_label)
             parts.append(duration_label)
             prompt_elapsed = snapshot.get("prompt_elapsed")
             if prompt_elapsed:
@@ -3506,6 +3552,14 @@ class HermesCLI:
                     if mem_label:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append((self._memory_label_style(snapshot), mem_label))
+                    # Skill count is lower priority; render only when wide enough
+                    # so existing styled segments (especially compression) don't
+                    # collapse into the overflow fallback.
+                    if width >= 100:
+                        skl_label = self._build_skills_label(snapshot)
+                        if skl_label:
+                            frags.append(("class:status-bar-dim", " │ "))
+                            frags.append(("class:status-bar-dim", skl_label))
                     frags.extend([
                         ("class:status-bar-dim", " │ "),
                         ("class:status-bar-dim", duration_label),

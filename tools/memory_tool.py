@@ -140,6 +140,54 @@ class MemoryStore:
             "memory": self._render_block("memory", self.memory_entries),
             "user": self._render_block("user", self.user_entries),
         }
+        # Track disk mtime so live-state refreshers can detect out-of-band writes
+        self._refresh_disk_mtime_tracker()
+
+    def _refresh_disk_mtime_tracker(self) -> None:
+        """Snapshot the on-disk mtimes for MEMORY.md / USER.md."""
+        mem_dir = get_memory_dir()
+        self._disk_mtime = {
+            "memory": self._safe_mtime(mem_dir / "MEMORY.md"),
+            "user": self._safe_mtime(mem_dir / "USER.md"),
+        }
+
+    @staticmethod
+    def _safe_mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except FileNotFoundError:
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def refresh_live_from_disk(self) -> bool:
+        """Re-read MEMORY.md / USER.md if disk mtime has advanced.
+
+        Updates ``memory_entries`` / ``user_entries`` (live state read by
+        ``_char_count`` and the status bar) but **does not** mutate
+        ``_system_prompt_snapshot`` — the system prompt stays frozen for
+        prompt-cache stability.
+
+        Returns True if any state was refreshed, False otherwise. Cheap when
+        nothing changed (two ``os.stat`` calls).
+        """
+        mem_dir = get_memory_dir()
+        if not hasattr(self, "_disk_mtime"):
+            self._disk_mtime = {"memory": 0.0, "user": 0.0}
+        changed = False
+        mem_path = mem_dir / "MEMORY.md"
+        user_path = mem_dir / "USER.md"
+        new_mem_mtime = self._safe_mtime(mem_path)
+        if new_mem_mtime and new_mem_mtime != self._disk_mtime.get("memory"):
+            self.memory_entries = list(dict.fromkeys(self._read_file(mem_path)))
+            self._disk_mtime["memory"] = new_mem_mtime
+            changed = True
+        new_user_mtime = self._safe_mtime(user_path)
+        if new_user_mtime and new_user_mtime != self._disk_mtime.get("user"):
+            self.user_entries = list(dict.fromkeys(self._read_file(user_path)))
+            self._disk_mtime["user"] = new_user_mtime
+            changed = True
+        return changed
 
     @staticmethod
     @contextmanager

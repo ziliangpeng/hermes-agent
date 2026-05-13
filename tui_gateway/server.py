@@ -1276,6 +1276,27 @@ def _sync_session_key_after_compress(
             pass
 
 
+def _count_active_skills() -> int:
+    """Count currently installed skills visible to the agent/TUI.
+
+    Mirrors the classic CLI status-bar segment: local skills plus configured
+    external skill dirs.  This is intentionally a live filesystem count so
+    skill pruning/restores show up without restarting the TUI gateway.
+    """
+    try:
+        from agent.skill_utils import get_all_skills_dirs, iter_skill_index_files
+
+        total = 0
+        for skills_dir in get_all_skills_dirs():
+            if not skills_dir.exists():
+                continue
+            for _ in iter_skill_index_files(skills_dir, "SKILL.md"):
+                total += 1
+        return total
+    except Exception:
+        return 0
+
+
 def _get_usage(agent) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
@@ -1289,6 +1310,7 @@ def _get_usage(agent) -> dict:
         "completion": g("session_completion_tokens"),
         "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        "skill_count": _count_active_skills(),
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
@@ -1299,6 +1321,20 @@ def _get_usage(agent) -> dict:
             usage["context_max"] = ctx_max
             usage["context_percent"] = max(0, min(100, round(ctx_used / ctx_max * 100)))
         usage["compressions"] = getattr(comp, "compression_count", 0) or 0
+    try:
+        store = getattr(agent, "_memory_store", None)
+        if store is not None:
+            if hasattr(store, "refresh_live_from_disk"):
+                try:
+                    store.refresh_live_from_disk()
+                except Exception:
+                    pass
+            usage["memory_chars"] = store._char_count("memory")
+            usage["memory_limit"] = store.memory_char_limit
+            usage["user_chars"] = store._char_count("user")
+            usage["user_limit"] = store.user_char_limit
+    except Exception:
+        pass
     try:
         from agent.usage_pricing import CanonicalUsage, estimate_usage_cost
 
