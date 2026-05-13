@@ -271,6 +271,40 @@ class TestCLIStatusBar:
 
         assert "🗜️" not in text
 
+    def test_skills_count_in_wide_text(self):
+        cli_obj = _make_cli()
+        snapshot = cli_obj._get_status_bar_snapshot()
+        snapshot.update(
+            {
+                "context_tokens": 12_450,
+                "context_length": 200_000,
+                "context_percent": 6,
+                "skill_count": 40,
+            }
+        )
+
+        with patch.object(cli_obj, "_get_status_bar_snapshot", return_value=snapshot):
+            text = cli_obj._build_status_bar_text(width=120)
+
+        assert "SKL 40" in text
+
+    def test_skills_count_absent_from_medium_text(self):
+        cli_obj = _make_cli()
+        snapshot = cli_obj._get_status_bar_snapshot()
+        snapshot.update(
+            {
+                "context_tokens": 12_450,
+                "context_length": 200_000,
+                "context_percent": 6,
+                "skill_count": 40,
+            }
+        )
+
+        with patch.object(cli_obj, "_get_status_bar_snapshot", return_value=snapshot):
+            text = cli_obj._build_status_bar_text(width=80)
+
+        assert "SKL 40" not in text
+
     def test_compression_count_style_thresholds(self):
         cli_obj = _make_cli()
 
