@@ -266,6 +266,21 @@ const shortModelLabel = (model: string) =>
 const modelLabel = (model: string, effort?: string, fast?: boolean) =>
   [shortModelLabel(model), effortLabel(effort), fast ? 'fast' : ''].filter(Boolean).join(' ')
 
+const hasNumber = (v: unknown): v is number => typeof v === 'number'
+
+export const memoryProfileLabel = (usage: Usage) => {
+  const parts: string[] = []
+  if (hasNumber(usage.memory_chars) && hasNumber(usage.memory_limit)) {
+    parts.push(`MEM ${fmtK(usage.memory_chars)}/${fmtK(usage.memory_limit)}`)
+  }
+  if (hasNumber(usage.user_chars) && hasNumber(usage.user_limit)) {
+    parts.push(`USR ${fmtK(usage.user_chars)}/${fmtK(usage.user_limit)}`)
+  }
+  return parts.join(' · ')
+}
+
+export const skillsLabel = (usage: Usage) => (hasNumber(usage.skill_count) ? `SKL ${usage.skill_count}` : '')
+
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
   const [color, setColor] = useState(t.color.accent)
@@ -382,6 +397,16 @@ export function StatusRule({
             </Text>
           </Text>
         ) : null}
+        {(() => {
+          const ml = cols >= 100 ? memoryProfileLabel(usage) : ''
+          const sl = cols >= 100 ? skillsLabel(usage) : ''
+          return (
+            <>
+              {ml ? <Text color={t.color.muted} wrap="truncate-end">{' │ '}{ml}</Text> : null}
+              {sl ? <Text color={t.color.muted} wrap="truncate-end">{' │ '}{sl}</Text> : null}
+            </>
+          )
+        })()}
         <SpawnHud t={t} />
         {voiceLabel ? (
           <Text
