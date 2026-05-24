@@ -4416,6 +4416,18 @@ class HermesCLI:
             if should_use_runtime_model:
                 self.model = runtime_model
 
+        # Strip ``custom:provider/`` prefix from model name when the runtime
+        # resolved to a known custom provider.  Hermes persists the full
+        # config key (``custom:my-provider/my-model``) as the model name on
+        # init, but upstream model servers only understand the bare model
+        # name (``my-model``).  The /model command path (via ``resolve_alias``)
+        # already strips this prefix — keep both paths consistent.
+        if runtime.get("requested_provider", "").startswith("custom:"):
+            bare = self.model
+            _, _, bare = bare.partition("/")
+            if bare:
+                self.model = bare
+
         # If model is still empty (e.g. user ran `hermes auth add openai-codex`
         # without `hermes model`), fall back to the provider's first catalog
         # model so the API call doesn't fail with "model must be non-empty".

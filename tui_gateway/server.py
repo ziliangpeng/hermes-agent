@@ -2022,6 +2022,13 @@ def _make_agent(sid: str, key: str, session_id: str | None = None):
         requested=requested_provider,
         target_model=model or None,
     )
+    # Strip ``custom:provider/`` prefix from model name for the same reason
+    # as _ensure_runtime_credentials in cli.py.
+    if runtime.get("requested_provider", "").startswith("custom:"):
+        bare = model
+        _, _, bare = bare.partition("/")
+        if bare:
+            model = bare
     return AIAgent(
         model=model,
         max_iterations=_cfg_max_turns(cfg, 90),
