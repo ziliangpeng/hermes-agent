@@ -4358,6 +4358,10 @@ class AIAgent:
                         api_key=_parent_runtime.get("api_key") or None,
                         credential_pool=getattr(self, "_credential_pool", None),
                         parent_session_id=self.session_id,
+                        # Match parent's reasoning config so the fork's ``thinking`` /
+                        # ``output_config`` are byte-identical in the request body —
+                        # Anthropic's cache key is namespaced by ``thinking`` presence.
+                        reasoning_config=getattr(self, "reasoning_config", None),
                     )
                     review_agent._memory_write_origin = "background_review"
                     review_agent._memory_write_context = "background_review"
