@@ -4358,6 +4358,20 @@ class AIAgent:
                         api_key=_parent_runtime.get("api_key") or None,
                         credential_pool=getattr(self, "_credential_pool", None),
                         parent_session_id=self.session_id,
+                        # Inherit the parent's toolset configuration so the review
+                        # fork's outbound request body has byte-identical ``tools[]``
+                        # with the parent's last main-turn request. Without this,
+                        # ``enabled_toolsets=None`` defaults to "all registered tools"
+                        # and the fork transmits every tool descriptor, while the
+                        # parent transmits only its narrower configured set — making
+                        # the two requests diverge in ``tools[]`` even though they
+                        # share ``messages[0..N]`` and ``system`` byte-for-byte.
+                        # Anthropic's prompt-cache key includes ``tools[]``, so any
+                        # divergence forks the cache lineage and forces a full prefix
+                        # rewrite. The post-construction whitelist still restricts
+                        # which tools the model is allowed to dispatch.
+                        enabled_toolsets=getattr(self, "enabled_toolsets", None),
+                        disabled_toolsets=getattr(self, "disabled_toolsets", None),
                         # Match parent's reasoning config so the fork's ``thinking`` /
                         # ``output_config`` are byte-identical in the request body —
                         # Anthropic's cache key is namespaced by ``thinking`` presence.

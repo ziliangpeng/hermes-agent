@@ -41,6 +41,10 @@ def _make_agent_stub(agent_cls):
     # Non-None so the test catches reasoning_config NOT being inherited —
     # which would put the fork into a different Anthropic cache namespace.
     agent.reasoning_config = {"enabled": True, "effort": "medium"}
+    # Parent's toolset configuration — must be propagated to the review
+    # fork so ``tools[]`` matches byte-for-byte.
+    agent.enabled_toolsets = ["memory", "skills", "terminal"]
+    agent.disabled_toolsets = ["spotify", "feishu_doc"]
     return agent
 
 
@@ -237,4 +241,68 @@ def test_review_fork_inherits_parent_reasoning_config():
         "the fork in a different Anthropic cache namespace and wasting the "
         "carefully-preserved system-prompt + tools-array parity established by "
         "the other tests in this file."
+    )
+
+
+def test_review_fork_inherits_parent_toolset_config():
+    """The review fork must receive ``enabled_toolsets`` / ``disabled_toolsets``
+    from the parent so the outbound request body's ``tools[]`` field matches
+    byte-for-byte.
+
+    Without this, ``enabled_toolsets=None`` defaults to "all registered tools"
+    and the fork sends every tool descriptor even when the parent disabled them.
+    Anthropic's prompt cache keys on the byte-exact ``tools[]`` array, so
+    divergence here forks the cache lineage and forces a full prefix rewrite
+    per nudge (~100-200K cache-write tokens for long conversations).
+    """
+    import run_agent
+
+    agent = _make_agent_stub(run_agent.AIAgent)
+
+    captured = {}
+
+    class _Recorder:
+        def __init__(self, *args, **kwargs):
+            captured["enabled_toolsets"] = kwargs.get("enabled_toolsets")
+            captured["disabled_toolsets"] = kwargs.get("disabled_toolsets")
+            self._cached_system_prompt = None
+            self._memory_write_origin = None
+            self._memory_write_context = None
+            self._memory_store = None
+            self._memory_enabled = None
+            self._user_profile_enabled = None
+            self._memory_nudge_interval = None
+            self._skill_nudge_interval = None
+            self.suppress_status_output = None
+            self.session_start = None
+            self.session_id = None
+
+        def run_conversation(self, *args, **kwargs):
+            raise RuntimeError("stop after recording — don't actually call the API")
+
+        def shutdown_memory_provider(self):
+            pass
+
+        def close(self):
+            pass
+
+    with patch.object(run_agent, "AIAgent", _Recorder), \
+         patch("threading.Thread", _SyncThread):
+        agent._spawn_background_review(
+            messages_snapshot=[],
+            review_memory=True,
+            review_skills=False,
+        )
+
+    assert captured.get("enabled_toolsets") == agent.enabled_toolsets, (
+        f"Review fork did not receive parent's enabled_toolsets. "
+        f"Got {captured.get('enabled_toolsets')!r}, expected {agent.enabled_toolsets!r}. "
+        "This causes ``tools[]`` to diverge between main turns and review nudges, "
+        "breaking Anthropic prompt-cache parity."
+    )
+    assert captured.get("disabled_toolsets") == agent.disabled_toolsets, (
+        f"Review fork did not receive parent's disabled_toolsets. "
+        f"Got {captured.get('disabled_toolsets')!r}, expected {agent.disabled_toolsets!r}. "
+        "This causes ``tools[]`` to diverge between main turns and review nudges, "
+        "breaking Anthropic prompt-cache parity."
     )
