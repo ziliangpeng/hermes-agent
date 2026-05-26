@@ -10062,6 +10062,7 @@ class AIAgent:
             is_tokenhub=_is_tokenhub,
             is_lmstudio=_is_lmstudio,
             is_custom_provider=self.provider == "custom",
+            use_chat_template_kwargs=self._use_chat_template_kwargs(),
             ollama_num_ctx=self._ollama_num_ctx,
             provider_preferences=_prefs or None,
             openrouter_min_coding_score=self.openrouter_min_coding_score,
@@ -10119,6 +10120,31 @@ class AIAgent:
             "xiaomi/",
         )
         return any(model.startswith(prefix) for prefix in reasoning_model_prefixes)
+
+    def _use_chat_template_kwargs(self) -> bool:
+        """Return True when the model entry in custom_providers sets
+        ``use_chat_template_kwargs: true``.
+
+        This tells ``build_kwargs`` to send
+        ``chat_template_kwargs: {thinking: true, enable_thinking: true}``
+        instead of top-level ``reasoning_effort``.  Intended for vLLM, SGLang,
+        and llama.cpp backends whose models (DeepSeek-V3/V4, Qwen3, etc.) read
+        thinking control from the chat template rather than a top-level field.
+        """
+        if self.provider != "custom" or not self.base_url:
+            return False
+        target = self.base_url.rstrip("/")
+        for cp in self._custom_providers or []:
+            if not isinstance(cp, dict):
+                continue
+            if (cp.get("base_url") or "").rstrip("/") != target:
+                continue
+            models = cp.get("models") or {}
+            if isinstance(models, dict):
+                model_cfg = models.get(self.model) or {}
+                if isinstance(model_cfg, dict):
+                    return bool(model_cfg.get("use_chat_template_kwargs", False))
+        return False
 
     def _lmstudio_reasoning_options_cached(self) -> list[str]:
         """Probe LM Studio's published reasoning ``allowed_options`` once per

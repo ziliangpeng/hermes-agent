@@ -310,6 +310,25 @@ class ChatCompletionsTransport(ProviderTransport):
             if _lm_effort is not None:
                 api_kwargs["reasoning_effort"] = _lm_effort
 
+        # chat_template_kwargs: opt-in thinking for vLLM / SGLang / llama.cpp.
+        # Enable by setting ``use_chat_template_kwargs: true`` on the model entry
+        # in config.yaml's custom_providers list.  Works for any backend that
+        # honours OpenAI-compatible ``chat_template_kwargs`` (DeepSeek-V3/V4,
+        # Qwen3, and any HuggingFace chat-template-aware model).
+        #
+        # When reasoning is explicitly disabled (reasoning_config.enabled=False)
+        # we send thinking=false so the server opts out cleanly; otherwise true.
+        if params.get("use_chat_template_kwargs", False):
+            _ctk_thinking = not (
+                reasoning_config
+                and isinstance(reasoning_config, dict)
+                and reasoning_config.get("enabled") is False
+            )
+            api_kwargs["chat_template_kwargs"] = {
+                "thinking": _ctk_thinking,
+                "enable_thinking": _ctk_thinking,
+            }
+
         # extra_body assembly
         extra_body: dict[str, Any] = {}
 
