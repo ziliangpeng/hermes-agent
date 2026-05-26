@@ -316,17 +316,21 @@ class ChatCompletionsTransport(ProviderTransport):
         # honours OpenAI-compatible ``chat_template_kwargs`` (DeepSeek-V3/V4,
         # Qwen3, and any HuggingFace chat-template-aware model).
         #
-        # When reasoning is explicitly disabled (reasoning_config.enabled=False)
-        # we send thinking=false so the server opts out cleanly; otherwise true.
+        # When reasoning is explicitly disabled (reasoning_config.enabled=False,
+        # or reasoning_config.effort="none") we send thinking=false so the server
+        # opts out cleanly; otherwise true.
         if params.get("use_chat_template_kwargs", False):
-            _ctk_thinking = not (
-                reasoning_config
-                and isinstance(reasoning_config, dict)
-                and reasoning_config.get("enabled") is False
-            )
+            _ctk_reasoning_config = params.get("reasoning_config")
+            _ctk_disabled = False
+            if _ctk_reasoning_config and isinstance(_ctk_reasoning_config, dict):
+                if _ctk_reasoning_config.get("enabled") is False:
+                    _ctk_disabled = True
+                _ctk_effort = _ctk_reasoning_config.get("effort")
+                if _ctk_effort and isinstance(_ctk_effort, str) and _ctk_effort.strip().lower() == "none":
+                    _ctk_disabled = True
             api_kwargs["chat_template_kwargs"] = {
-                "thinking": _ctk_thinking,
-                "enable_thinking": _ctk_thinking,
+                "thinking": not _ctk_disabled,
+                "enable_thinking": not _ctk_disabled,
             }
 
         # extra_body assembly

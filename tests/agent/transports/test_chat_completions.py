@@ -655,6 +655,17 @@ class TestChatCompletionsChatTemplateKwargs:
         )
         assert kw["chat_template_kwargs"] == {"thinking": False, "enable_thinking": False}
 
+    def test_flag_true_effort_none_also_disables(self, transport):
+        """reasoning_config.effort="none" must disable thinking just like
+        enabled=False, since some users set effort rather than enabled."""
+        kw = transport.build_kwargs(
+            model="deepseek-ai/DeepSeek-V3-0324",
+            messages=[{"role": "user", "content": "Hi"}],
+            use_chat_template_kwargs=True,
+            reasoning_config={"effort": "none"},
+        )
+        assert kw["chat_template_kwargs"] == {"thinking": False, "enable_thinking": False}
+
     def test_flag_false_no_key_injected(self, transport):
         kw = transport.build_kwargs(
             model="deepseek-ai/DeepSeek-V3-0324",
