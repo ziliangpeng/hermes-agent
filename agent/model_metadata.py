@@ -851,8 +851,9 @@ def _load_context_cache() -> Dict[str, int]:
                 if norm_key not in normalized:
                     normalized[norm_key] = int(val) if not isinstance(val, int) else val
                 # If both trailing-slash and non-trailing-slash versions
-                # existed, the last one iterated wins (they should be
-                # identical; if not, this is benign).
+                # existed, the first one iterated wins (they should be
+                # identical; if not, the discrepancy is benign since the
+                # cache is a pure optimization).
             else:
                 # Keys without a '@' — keep as-is (legacy format)
                 normalized[key] = int(val) if not isinstance(val, int) else val
