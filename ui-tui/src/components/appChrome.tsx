@@ -364,8 +364,33 @@ const effortLabel = (effort?: string) => {
   return value && value !== 'medium' && value !== 'normal' && value !== 'default' ? value : ''
 }
 
-const shortModelLabel = (model: string) =>
-  model
+// ── Model-name display overrides ────────────────────────────────────
+// Narrow display names for the status bar.  Matched after stripping
+// the provider prefix and normalising separator characters.
+const _MODEL_SHORT_NAMES: Record<string, string> = {
+  // DeepSeek V4 family
+  "dsv4 flash": "V4F",
+  "dsv4-flash": "V4F",
+  "dsv4 flash h100 vllm": "V4F",
+  "dsv4 flash h100 sglang": "V4F",
+  "dsv4 vllm": "V4",
+  "dsv4-pro": "V4P",
+  "dsv4 pro": "V4P",
+  // Anthropic
+  "fable 5": "f5",
+  "claude-fable-5": "f5",
+  "opus 4 8": "o4.8",
+  "opus 4.8": "o4.8",
+  "opus 4 7": "o4.7",
+  "opus 4.7": "o4.7",
+  "sonnet 4 6": "s4.6",
+  "sonnet 4.6": "s4.6",
+  "haiku 4 5": "h4.5",
+  "haiku 4.5": "h4.5",
+}
+
+const shortModelLabel = (model: string) => {
+  const short = model
     .split('/')
     .pop()!
     .replace(/^claude[-_]/, '')
@@ -373,6 +398,9 @@ const shortModelLabel = (model: string) =>
     .replace(/[-_]/g, ' ')
     .replace(/\b(\d+)\s+(\d+)\b/g, '$1.$2')
     .trim()
+    .toLowerCase()
+  return _MODEL_SHORT_NAMES[short] ?? short
+}
 
 const modelLabel = (model: string, effort?: string, fast?: boolean) =>
   [shortModelLabel(model), effortLabel(effort), fast ? 'fast' : ''].filter(Boolean).join(' ')
@@ -382,15 +410,15 @@ const hasNumber = (v: unknown): v is number => typeof v === 'number'
 export const memoryProfileLabel = (usage: Usage) => {
   const parts: string[] = []
   if (hasNumber(usage.memory_chars) && hasNumber(usage.memory_limit)) {
-    parts.push(`MEM ${fmtK(usage.memory_chars)}/${fmtK(usage.memory_limit)}`)
+    parts.push(`M${Math.round((usage.memory_chars / usage.memory_limit) * 100)}%`)
   }
   if (hasNumber(usage.user_chars) && hasNumber(usage.user_limit)) {
-    parts.push(`USR ${fmtK(usage.user_chars)}/${fmtK(usage.user_limit)}`)
+    parts.push(`U${Math.round((usage.user_chars / usage.user_limit) * 100)}%`)
   }
-  return parts.join(' · ')
+  return parts.join(' ')
 }
 
-export const skillsLabel = (usage: Usage) => (hasNumber(usage.skill_count) ? `SKL ${usage.skill_count}` : '')
+export const skillsLabel = (usage: Usage) => (hasNumber(usage.skill_count) ? `S${usage.skill_count}` : '')
 
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
@@ -516,6 +544,9 @@ export function StatusRule({
     typeof usage.dev_credits_spent_micros === 'number'
       ? `Δ ${(usage.dev_credits_spent_micros / 10000).toFixed(1)}¢`
       : ''
+  const memoryLabel = memoryProfileLabel(usage)
+  const skillsStr = skillsLabel(usage)
+  const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
 
   const showBar = !!bar && fits(SEP + stringWidth(`[${bar}] ${pct != null ? `${pct}%` : ''}`))
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
@@ -527,6 +558,7 @@ export function StatusRule({
     segs.duration && !busy && lastTurnEndedAt != null && fits(SEP + stringWidth('✓ ') + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
+  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
   const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
@@ -666,16 +698,12 @@ export function StatusRule({
             {devCreditsText}
           </Text>
         ) : null}
-        {(() => {
-          const ml = cols >= 100 ? memoryProfileLabel(usage) : ''
-          const sl = cols >= 100 ? skillsLabel(usage) : ''
-          return (
-            <>
-              {ml ? <Text color={t.color.muted} wrap="truncate-end">{' │ '}{ml}</Text> : null}
-              {sl ? <Text color={t.color.muted} wrap="truncate-end">{' │ '}{sl}</Text> : null}
-            </>
-          )
-        })()}
+        {showMemSkl ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}
+            {memSklLabel}
+          </Text>
+        ) : null}
         {/* SpawnHud isn't part of the tail budget (its width is dynamic), so it
             renders last — any overflow truncates the HUD itself rather than the
             budgeted segments before it. It self-hides when no delegation runs. */}
