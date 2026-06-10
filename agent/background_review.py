@@ -693,6 +693,10 @@ def _run_review_in_thread(
                 parent_session_id=agent.session_id,
                 enabled_toolsets=getattr(agent, "enabled_toolsets", None),
                 disabled_toolsets=getattr(agent, "disabled_toolsets", None),
+                # Match parent's reasoning config so ``thinking`` / ``output_config``
+                # are byte-identical — Anthropic's cache key is namespaced by
+                # ``thinking`` presence.
+                reasoning_config=getattr(agent, "reasoning_config", None),
                 skip_memory=True,
             )
             review_agent._memory_write_origin = "background_review"
