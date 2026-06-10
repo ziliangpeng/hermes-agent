@@ -3050,6 +3050,27 @@ def _sync_session_key_after_compress(
             pass
 
 
+def _count_active_skills() -> int:
+    """Count currently installed skills visible to the agent/TUI.
+
+    Mirrors the classic CLI status-bar segment: local skills plus configured
+    external skill dirs.  This is intentionally a live filesystem count so
+    skill pruning/restores show up without restarting the TUI gateway.
+    """
+    try:
+        from agent.skill_utils import get_all_skills_dirs, iter_skill_index_files
+
+        total = 0
+        for skills_dir in get_all_skills_dirs():
+            if not skills_dir.exists():
+                continue
+            for _ in iter_skill_index_files(skills_dir, "SKILL.md"):
+                total += 1
+        return total
+    except Exception:
+        return 0
+
+
 def _get_usage(agent) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
@@ -3061,6 +3082,7 @@ def _get_usage(agent) -> dict:
         "completion": g("session_completion_tokens"),
         "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        "skill_count": _count_active_skills(),
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
@@ -3096,6 +3118,36 @@ def _get_usage(agent) -> dict:
     try:
         from tools.async_delegation import active_count as _async_active_count
         usage["active_subagents"] = _async_active_count()
+        store = getattr(agent, "_memory_store", None)
+        if store is not None:
+            if hasattr(store, "refresh_live_from_disk"):
+                try:
+                    store.refresh_live_from_disk()
+                except Exception:
+                    pass
+            usage["memory_chars"] = store._char_count("memory")
+            usage["memory_limit"] = store.memory_char_limit
+            usage["user_chars"] = store._char_count("user")
+            usage["user_limit"] = store.user_char_limit
+    except Exception:
+        pass
+    try:
+        from agent.usage_pricing import CanonicalUsage, estimate_usage_cost
+
+        cost = estimate_usage_cost(
+            usage["model"],
+            CanonicalUsage(
+                input_tokens=usage["input"],
+                output_tokens=usage["output"],
+                cache_read_tokens=usage["cache_read"],
+                cache_write_tokens=usage["cache_write"],
+            ),
+            provider=getattr(agent, "provider", None),
+            base_url=getattr(agent, "base_url", None),
+        )
+        usage["cost_status"] = cost.status
+        if cost.amount_usd is not None:
+            usage["cost_usd"] = float(cost.amount_usd)
     except Exception:
         pass
     # Dev-only live credits-spent readout (L0 usage-aware-credits). Gated on

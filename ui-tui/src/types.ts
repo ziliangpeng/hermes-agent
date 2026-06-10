@@ -169,6 +169,9 @@ export interface SessionInfo {
 export interface Usage {
   active_subagents?: number
   calls: number
+  cache_read?: number
+  cache_write?: number
+  completion?: number
   compressions?: number
   context_max?: number
   context_percent?: number
@@ -177,9 +180,15 @@ export interface Usage {
   cost_usd?: number
   dev_credits_spent_micros?: number
   input: number
+  memory_chars?: number
+  memory_limit?: number
   output: number
+  prompt?: number
   reasoning?: number
+  skill_count?: number
   total: number
+  user_chars?: number
+  user_limit?: number
 }
 
 export interface SudoReq {
