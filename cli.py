@@ -4551,6 +4551,17 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         model_short = model_name.split("/")[-1] if "/" in model_name else model_name
         if model_short.endswith(".gguf"):
             model_short = model_short[:-5]
+        # Compact display name lookup (mirrors TUI _MODEL_SHORT_NAMES)
+        _short_map = {
+            "dsv4-flash-h100-vllm": "V4F", "dsv4-flash": "V4F",
+            "dsv4 vllm": "V4", "dsv4-pro": "V4P", "dsv4 pro": "V4P",
+            "claude-fable-5": "f5", "fable 5": "f5",
+            "claude-opus-4-8": "o4.8", "opus 4.8": "o4.8",
+            "claude-opus-4-7": "o4.7", "opus 4.7": "o4.7",
+            "claude-sonnet-4-6": "s4.6", "sonnet 4.6": "s4.6",
+            "claude-haiku-4-5": "h4.5", "haiku 4.5": "h4.5",
+        }
+        model_short = _short_map.get(model_short.replace("-", " ").strip().lower(), model_short)
         if len(model_short) > 26:
             model_short = f"{model_short[:23]}..."
 
@@ -4689,33 +4700,35 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         return snapshot
 
     @staticmethod
-    def _format_memory_count_compact(value: int) -> str:
-        """Compact char count for status bar: 8800 -> '8.8k', 234 -> '234'."""
-        if value is None:
-            return "--"
-        if value < 1000:
-            return str(value)
-        # one decimal for <100k, integer beyond
-        if value < 100_000:
-            return f"{value/1000:.1f}k"
-        return f"{value//1000}k"
+    def _status_bar_display_width(text: str) -> int:
+        """Return terminal cell width for status-bar text.
+
+        len() is not enough for prompt_toolkit layout decisions because some
+        glyphs can render wider than one Python codepoint. Keeping the status
+        bar within the real display width prevents it from wrapping onto a
+        second line and leaving behind duplicate rows.
+        """
+        try:
+            from prompt_toolkit.utils import get_cwidth
+
+            return get_cwidth(text)
+        except ImportError:
+            return len(text)
 
     def _build_memory_label(self, snapshot: Dict[str, Any]) -> Optional[str]:
-        """Render 'MEM 8.8k/8.8k · USR 5.5k/5.5k' if memory_store is wired up."""
+        """Render compact 'M25% U13%' if memory_store is wired up."""
         if snapshot.get("memory_limit") is None and snapshot.get("user_limit") is None:
             return None
         parts = []
         if snapshot.get("memory_limit"):
-            parts.append(
-                f"MEM {self._format_memory_count_compact(snapshot.get('memory_chars', 0))}"
-                f"/{self._format_memory_count_compact(snapshot['memory_limit'])}"
-            )
+            v = snapshot.get('memory_chars', 0) or 0
+            l = snapshot['memory_limit'] or 1
+            parts.append(f"M{round((v / l) * 100)}%")
         if snapshot.get("user_limit"):
-            parts.append(
-                f"USR {self._format_memory_count_compact(snapshot.get('user_chars', 0))}"
-                f"/{self._format_memory_count_compact(snapshot['user_limit'])}"
-            )
-        return " · ".join(parts) if parts else None
+            v = snapshot.get('user_chars', 0) or 0
+            l = snapshot['user_limit'] or 1
+            parts.append(f"U{round((v / l) * 100)}%")
+        return " ".join(parts) if parts else None
 
     @staticmethod
     def _build_skills_label(snapshot: Dict[str, Any]) -> Optional[str]:
@@ -4727,22 +4740,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         n = snapshot.get("skill_count")
         if n is None:
             return None
-        return f"SKL {n}"
-
-    @staticmethod
-    def _status_bar_display_width(text: str) -> int:
-        """Return terminal cell width for status-bar text.
-
-        len() is not enough for prompt_toolkit layout decisions because some
-        glyphs can render wider than one Python codepoint. Keeping the status
-        bar within the real display width prevents it from wrapping onto a
-        second line and leaving behind duplicate rows.
-        """
-        try:
-            from prompt_toolkit.utils import get_cwidth
-            return get_cwidth(text or "")
-        except Exception:
-            return len(text or "")
+        return f"S{n}"
 
     @classmethod
     def _trim_status_bar_text(cls, text: str, max_width: int) -> str:
