@@ -466,10 +466,13 @@ class TestCodexOAuthContextLength:
         assert ctx == 272_000, f"Stale entry should have been re-resolved to 272k, got {ctx}"
         # Live save was called with the fresh value
         mock_save.assert_called_with("gpt-5.5", base_url, 272_000)
-        # The stale entry was removed from disk; unrelated entries survived
+        # The stale entry was removed from disk; unrelated entries survived.
+        # _load_context_cache normalizes base_urls, so the on-disk key now
+        # has no trailing slash.
         remaining = _yaml.safe_load(cache_file.read_text()).get("context_lengths", {})
+        normalized_other_key = "other-model@https://api.openai.com/v1"
         assert stale_key not in remaining, "Stale entry was not invalidated from the cache file"
-        assert remaining.get(other_key) == 128_000, "Unrelated cache entries must not be touched"
+        assert remaining.get(normalized_other_key) == 128_000, "Unrelated cache entries must not be touched"
 
     def test_fresh_codex_cache_under_400k_is_respected(self, tmp_path, monkeypatch):
         """Codex entries at the correct 272k must NOT be invalidated —

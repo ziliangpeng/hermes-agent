@@ -1000,14 +1000,50 @@ def _get_context_cache_path() -> Path:
 
 
 def _load_context_cache() -> Dict[str, int]:
-    """Load the model+provider -> context_length cache from disk."""
+    """Load and return the context-length cache, normalizing base_urls.
+
+    Normalizes trailing-slash differences (e.g. ``/v1`` vs ``/v1/``) so
+    old cache keys that were persisted with a trailing-slash base_url are
+    automatically merged with their normalized counterpart on first read.
+    """
     path = _get_context_cache_path()
     if not path.exists():
         return {}
     try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-        return data.get("context_lengths", {})
+        raw = data.get("context_lengths", {})
+        if not isinstance(raw, dict):
+            return {}
+        # Normalize keys: migrate any old keys whose base_url had a
+        # trailing slash / other non-canonical form to the normalized
+        # version.  Only rewrite the file when a migration actually
+        # happened, so idle reads stay fast.
+        normalized: Dict[str, int] = {}
+        dirty = False
+        for key, val in raw.items():
+            if "@" in key:
+                model_part, url_part = key.split("@", 1)
+                norm_url = _normalize_base_url(url_part)
+                norm_key = f"{model_part}@{norm_url}"
+                if norm_key != key:
+                    dirty = True
+                if norm_key not in normalized:
+                    normalized[norm_key] = int(val) if not isinstance(val, int) else val
+                # If both trailing-slash and non-trailing-slash versions
+                # existed, the first one iterated wins (they should be
+                # identical; if not, the discrepancy is benign since the
+                # cache is a pure optimization).
+            else:
+                # Keys without a '@' — keep as-is (legacy format)
+                normalized[key] = int(val) if not isinstance(val, int) else val
+        if dirty:
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    yaml.dump({"context_lengths": normalized}, f, default_flow_style=False)
+            except Exception as e:
+                logger.debug("Failed to migrate context length cache: %s", e)
+        return normalized
     except Exception as e:
         logger.debug("Failed to load context length cache: %s", e)
         return {}
@@ -1016,10 +1052,10 @@ def _load_context_cache() -> Dict[str, int]:
 def save_context_length(model: str, base_url: str, length: int) -> None:
     """Persist a discovered context length for a model+provider combo.
 
-    Cache key is ``model@base_url`` so the same model name served from
-    different providers can have different limits.
+    Cache key is ``model@normalized_base_url`` so trailing-slash
+    differences (e.g. ``/v1`` vs ``/v1/``) don't create split entries.
     """
-    key = f"{model}@{base_url}"
+    key = f"{model}@{_normalize_base_url(base_url)}"
     cache = _load_context_cache()
     if cache.get(key) == length:
         return  # already stored
@@ -1036,14 +1072,14 @@ def save_context_length(model: str, base_url: str, length: int) -> None:
 
 def get_cached_context_length(model: str, base_url: str) -> Optional[int]:
     """Look up a previously discovered context length for model+provider."""
-    key = f"{model}@{base_url}"
+    key = f"{model}@{_normalize_base_url(base_url)}"
     cache = _load_context_cache()
     return cache.get(key)
 
 
 def _invalidate_cached_context_length(model: str, base_url: str) -> None:
     """Drop a stale cache entry so it gets re-resolved on the next lookup."""
-    key = f"{model}@{base_url}"
+    key = f"{model}@{_normalize_base_url(base_url)}"
     cache = _load_context_cache()
     if key not in cache:
         return
