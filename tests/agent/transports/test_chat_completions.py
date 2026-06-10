@@ -727,6 +727,53 @@ class TestChatCompletionsLmStudioReasoning:
         assert kw["reasoning_effort"] == "high"
 
 
+class TestChatCompletionsChatTemplateKwargs:
+    """chat_template_kwargs injection for HF-chat-template-aware backends.
+
+    When ``use_chat_template_kwargs=True`` the transport must inject
+    ``chat_template_kwargs: {thinking: true, enable_thinking: true}`` so that
+    vLLM / SGLang / llama.cpp backends enable thinking via the chat template
+    rather than a top-level ``reasoning_effort`` field.
+    """
+
+    def test_injects_enabled_for_no_reasoning_config(self, transport):
+        kw = transport.build_kwargs(
+            model="test-model", messages=[{"role": "user", "content": "Hi"}],
+            use_chat_template_kwargs=True,
+        )
+        assert kw["chat_template_kwargs"] == {"thinking": True, "enable_thinking": True}
+
+    def test_disables_when_reasoning_enabled_false(self, transport):
+        kw = transport.build_kwargs(
+            model="test-model", messages=[{"role": "user", "content": "Hi"}],
+            use_chat_template_kwargs=True,
+            reasoning_config={"enabled": False},
+        )
+        assert kw["chat_template_kwargs"] == {"thinking": False, "enable_thinking": False}
+
+    def test_disables_when_effort_none(self, transport):
+        kw = transport.build_kwargs(
+            model="test-model", messages=[{"role": "user", "content": "Hi"}],
+            use_chat_template_kwargs=True,
+            reasoning_config={"effort": "none"},
+        )
+        assert kw["chat_template_kwargs"] == {"thinking": False, "enable_thinking": False}
+
+    def test_omits_when_flag_false(self, transport):
+        kw = transport.build_kwargs(
+            model="test-model", messages=[{"role": "user", "content": "Hi"}],
+            use_chat_template_kwargs=False,
+        )
+        assert "chat_template_kwargs" not in kw
+
+    def test_omits_when_flag_missing(self, transport):
+        """Omitting the flag entirely must not inject chat_template_kwargs."""
+        kw = transport.build_kwargs(
+            model="test-model", messages=[{"role": "user", "content": "Hi"}],
+        )
+        assert "chat_template_kwargs" not in kw
+
+
 class TestChatCompletionsValidate:
 
     def test_none(self, transport):
