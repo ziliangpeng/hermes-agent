@@ -4554,7 +4554,10 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         # Compact display name lookup (mirrors TUI _MODEL_SHORT_NAMES)
         _short_map = {
             "dsv4-flash-h100-vllm": "V4F", "dsv4-flash": "V4F",
-            "dsv4 vllm": "V4", "dsv4-pro": "V4P", "dsv4 pro": "V4P",
+            "dsv4 flash h100 vllm": "V4F",
+            "dsv4 vllm": "V4",
+            "dsv4-pro": "V4P", "dsv4 pro": "V4P",
+            "dsv4 pro h100 vllm": "V4P",
             "claude-fable-5": "f5", "fable 5": "f5",
             "claude-opus-4-8": "o4.8", "opus 4.8": "o4.8",
             "claude-opus-4-7": "o4.7", "opus 4.7": "o4.7",

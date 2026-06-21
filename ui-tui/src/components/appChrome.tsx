@@ -376,6 +376,7 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   "dsv4 vllm": "V4",
   "dsv4-pro": "V4P",
   "dsv4 pro": "V4P",
+  "dsv4 pro h100 vllm": "V4P",
   // Anthropic
   "fable 5": "f5",
   "claude-fable-5": "f5",
