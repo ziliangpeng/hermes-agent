@@ -377,6 +377,9 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   "dsv4-pro": "V4P",
   "dsv4 pro": "V4P",
   "dsv4 pro h100 vllm": "V4P",
+  // GLM-5.2 (gcp5 warhol / amd4 base)
+  "warhol glm 52 fp8": "G52",
+  "glm 52 fp8 base": "G52a",
   // Anthropic
   "fable 5": "f5",
   "claude-fable-5": "f5",
