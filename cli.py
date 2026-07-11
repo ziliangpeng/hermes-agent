@@ -4558,6 +4558,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "dsv4 vllm": "V4",
             "dsv4-pro": "V4P", "dsv4 pro": "V4P",
             "dsv4 pro h100 vllm": "V4P",
+            "warhol glm 52 fp8": "G52",
+            "glm 52 fp8 base": "G52a",
             "claude-fable-5": "f5", "fable 5": "f5",
             "claude-opus-4-8": "o4.8", "opus 4.8": "o4.8",
             "claude-opus-4-7": "o4.7", "opus 4.7": "o4.7",
