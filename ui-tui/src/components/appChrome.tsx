@@ -380,6 +380,11 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   // GLM-5.2 (gcp5 warhol / amd4 base)
   "warhol glm 52 fp8": "G52",
   "glm 52 fp8 base": "G52a",
+  "glm52": "G52",
+  "glm52 a4": "G52a4",
+  "glm52 a2": "G52a2",
+  "glm 52 fp8 mi350": "G52a4",
+  "glm 52 fp8 mi325": "G52a2",
   // Anthropic
   "fable 5": "f5",
   "claude-fable-5": "f5",
