@@ -388,6 +388,7 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   // Anthropic
   "fable 5": "f5",
   "claude-fable-5": "f5",
+  "claude opus 5": "O5",
   "opus 4 8": "o4.8",
   "opus 4.8": "o4.8",
   "opus 4 7": "o4.7",
