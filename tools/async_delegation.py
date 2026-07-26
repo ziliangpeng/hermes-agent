@@ -105,7 +105,7 @@ def delegation_stats() -> Dict[str, int]:
     Returns a dict with:
       - ``running``: delegations currently executing.
       - ``completed``: delegations that finished (any non-running status)
-        - ``total``: running + completed
+      - ``total``: running + completed
 
     Completed records are retained up to ``_MAX_RETAINED_COMPLETED``
     after pruning, so ``completed`` reflects the recent tail, not the

@@ -106,27 +106,27 @@ const baseProps = {
 
 describe('StatusRule background-subagent indicator', () => {
   it('renders 🏃N on a wide terminal when subagents are running', () => {
-  const element = StatusRule({
-    ...baseProps,
-    usage: { ...baseProps.usage, active_subagents: 3 }
-  })
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, active_subagents: 3 }
+    })
 
-  expect(textContent(element)).toContain('🏃3')
+    expect(textContent(element)).toContain('🏃3')
   })
 
   it('omits the segment when no subagents are running', () => {
-  const element = StatusRule({
-    ...baseProps,
-    usage: { ...baseProps.usage, active_subagents: 0 }
-  })
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, active_subagents: 0 }
+    })
 
-  expect(textContent(element)).not.toContain('🏃')
+    expect(textContent(element)).not.toContain('🏃')
   })
 
   it('omits the segment when the field is absent', () => {
-  const element = StatusRule({ ...baseProps })
+    const element = StatusRule({ ...baseProps })
 
-  expect(textContent(element)).not.toContain('🏃')
+    expect(textContent(element)).not.toContain('🏃')
   })
 
   it('spells out the auto-resume hint when idle with subagents in flight', () => {

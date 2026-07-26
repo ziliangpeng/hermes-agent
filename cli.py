@@ -4776,7 +4776,6 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             return f"🏃{running}🏁{completed}"
         return f"🏃{running}"
 
-
     @classmethod
     def _trim_status_bar_text(cls, text: str, max_width: int) -> str:
         """Trim status-bar text to a single terminal row."""
@@ -5259,8 +5258,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
             if width < 52:
                 frags = [
-                    ("class:status-bar", f" ⚕ "),
-                    ("class:status-bar-strong", snapshot['model_short']),
+                    ("class:status-bar", " ⚕ "),
+                    ("class:status-bar-strong", snapshot["model_short"]),
                     ("class:status-bar-dim", " · "),
                     ("class:status-bar-dim", duration_label),
                 ]
@@ -5277,8 +5276,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     subagent_label = self._build_subagent_label(snapshot)
                     frags = [
-                        ("class:status-bar", f" ⚕ "),
-                        ("class:status-bar-strong", snapshot['model_short']),
+                        ("class:status-bar", " ⚕ "),
+                        ("class:status-bar-strong", snapshot["model_short"]),
                         ("class:status-bar-dim", " · "),
                         (self._status_bar_context_style(percent), percent_label),
                     ]
@@ -5316,8 +5315,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     subagent_label = self._build_subagent_label(snapshot)
                     frags = [
-                        ("class:status-bar", f" ⚕ "),
-                        ("class:status-bar-strong", snapshot['model_short']),
+                        ("class:status-bar", " ⚕ "),
+                        ("class:status-bar-strong", snapshot["model_short"]),
                         ("class:status-bar-dim", " │ "),
                         ("class:status-bar-dim", context_label),
                         ("class:status-bar-dim", " │ "),
