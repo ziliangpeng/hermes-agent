@@ -206,7 +206,15 @@ class TestFormatDuration:
 
     def test_days(self):
         result = _format_duration(172800)  # 2 days
-        assert result == "2.0d"
+        assert result == "2d"
+
+    def test_days_with_hours(self):
+        result = _format_duration(129600)  # 1.5 days = 1d 12h
+        assert result == "1d 12h"
+
+    def test_hours_to_days_boundary(self):
+        assert _format_duration(86399) == "23h 59m"  # just under 24h
+        assert _format_duration(86400) == "1d"        # exactly 24h
 
 
 class TestBarChart:
