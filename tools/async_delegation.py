@@ -99,6 +99,29 @@ def active_count() -> int:
         return sum(1 for r in _records.values() if r.get("status") == "running")
 
 
+def delegation_stats() -> Dict[str, int]:
+    """Running + completed counts for status-bar display.
+
+    Returns a dict with:
+      - ``running``: delegations currently executing.
+      - ``completed``: delegations that finished (any non-running status)
+        - ``total``: running + completed
+
+    Completed records are retained up to ``_MAX_RETAINED_COMPLETED``
+    after pruning, so ``completed`` reflects the recent tail, not the
+    full session lifetime.
+    """
+    with _records_lock:
+        running = 0
+        completed = 0
+        for r in _records.values():
+            if r.get("status") == "running":
+                running += 1
+            else:
+                completed += 1
+        return {"running": running, "completed": completed, "total": running + completed}
+
+
 def _new_delegation_id() -> str:
     return f"deleg_{uuid.uuid4().hex[:8]}"
 

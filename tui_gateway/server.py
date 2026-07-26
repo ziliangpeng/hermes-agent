@@ -1805,8 +1805,8 @@ def _set_session_cwd(session: dict, cwd: str) -> str:
 # Keep aligned with `INDICATOR_STYLES` / `DEFAULT_INDICATOR_STYLE` in
 # ``ui-tui/src/app/interfaces.ts`` — both ends validate against the
 # same shape so `config.get indicator` and the live TUI render agree.
-_INDICATOR_STYLES: tuple[str, ...] = ("ascii", "emoji", "kaomoji", "unicode")
-_INDICATOR_DEFAULT = "kaomoji"
+_INDICATOR_STYLES: tuple[str, ...] = ("ascii", "dot", "emoji", "kaomoji", "unicode")
+_INDICATOR_DEFAULT = "dot"
 
 
 def _load_cfg() -> dict:
@@ -3116,8 +3116,10 @@ def _get_usage(agent) -> dict:
     # batches + background single delegations). Mirrors the classic CLI status
     # bar's ⛓ indicator; sourced from the same async_delegation registry.
     try:
-        from tools.async_delegation import active_count as _async_active_count
-        usage["active_subagents"] = _async_active_count()
+        from tools.async_delegation import delegation_stats as _delegation_stats
+        stats = _delegation_stats()
+        usage["active_subagents"] = stats["running"]
+        usage["completed_subagents"] = stats["completed"]
         store = getattr(agent, "_memory_store", None)
         if store is not None:
             if hasattr(store, "refresh_live_from_disk"):
