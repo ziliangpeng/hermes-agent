@@ -44,13 +44,7 @@ interface IndicatorRender {
   showVerb: boolean
 }
 
-const renderIndicator = (style: IndicatorStyle, tick: number, busy: boolean): IndicatorRender => {
-  if (style === 'dot') {
-    // Static colored circle: green when idle, yellow when busy.
-    // No animation, no verb — the most compact possible indicator.
-    return { frame: busy ? '🟡' : '🟢', intervalMs: 0, showVerb: false }
-  }
-
+const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender => {
   if (style === 'kaomoji') {
     return { frame: FACES[tick % FACES.length] ?? '', intervalMs: FACE_TICK_MS, showVerb: true }
   }
@@ -87,11 +81,6 @@ const KAOMOJI_FRAME_WIDTH = FACES.reduce((max, f) => Math.max(max, stringWidth(f
 const EMOJI_FRAME_WIDTH = EMOJI_FRAMES.reduce((max, f) => Math.max(max, stringWidth(f)), 1)
 
 const indicatorFrameWidth = (style: IndicatorStyle): number => {
-  if (style === 'dot') {
-    // 🟢/🟡 emoji — typically 2 cells wide in most terminals.
-    return 2
-  }
-
   if (style === 'kaomoji') {
     return KAOMOJI_FRAME_WIDTH
   }
@@ -119,7 +108,7 @@ export const MAX_DURATION_WIDTH = Math.max(
 // ascii add a fixed-width verb; any style adds a bounded elapsed-time tail.
 // Mirrors FaceTicker's `frame + verbSegment + durationSegment` layout.
 export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
-  const { showVerb } = renderIndicator(style, 0, true)
+  const { showVerb } = renderIndicator(style, 0)
   const verb = showVerb ? 1 + VERB_PAD_LEN : 0
   // ` · ` plus the bounded clock (e.g. `59m 59s`).
   const duration = hasDuration ? stringWidth(' · ') + MAX_DURATION_WIDTH : 0
@@ -136,31 +125,26 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   // `/indicator` switch re-arms the interval (and skips the verb timer
   // for verb-less styles like `unicode`) without leaving the previous
   // timer dangling.
-  const { intervalMs, showVerb } = renderIndicator(style, 0, true)
+  const { intervalMs, showVerb } = renderIndicator(style, 0)
 
   useEffect(() => {
-    // `dot` style is static — no glyph animation needed. Only keep the
-    // duration clock alive so the elapsed timer still ticks.
-    if (intervalMs > 0) {
-      const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
-      const clock = setInterval(() => setNow(Date.now()), 1000)
-      const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
+    const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
+    const clock = setInterval(() => setNow(Date.now()), 1000)
+    // Verb timer is gated on `showVerb` — `unicode` style hides the verb
+    // entirely, so cycling `verbTick` would be an avoidable re-render.
+    const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
 
-      return () => {
-        clearInterval(glyph)
-        clearInterval(clock)
-        if (verb !== null) {
-          clearInterval(verb)
-        }
+    return () => {
+      clearInterval(glyph)
+      clearInterval(clock)
+
+      if (verb !== null) {
+        clearInterval(verb)
       }
     }
-
-    // Static style (dot): only the duration clock.
-    const clock = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(clock)
   }, [intervalMs, showVerb])
 
-  const { frame } = renderIndicator(style, tick, true)
+  const { frame } = renderIndicator(style, tick)
   const verb = VERBS[verbTick % VERBS.length] ?? ''
   const verbSegment = showVerb ? ` ${padVerb(verb)}` : ''
   // Leading space keeps a gap between the frame and the duration when the

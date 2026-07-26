@@ -4776,14 +4776,6 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             return f"🏃{running}🏁{completed}"
         return f"🏃{running}"
 
-    def _status_indicator(self) -> str:
-        """Compact colored circle: 🟢 ready, 🟡 working.
-
-        Replaces the old ⚕ prefix with a live agent-state indicator.
-        Green = idle/ready (waiting for user input).
-        Yellow = agent is running (tool executing or model thinking).
-        """
-        return "🟡" if getattr(self, "_agent_running", False) else "🟢"
 
     @classmethod
     def _trim_status_bar_text(cls, text: str, max_width: int) -> str:
@@ -5184,12 +5176,12 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
             yolo_active = self._is_session_yolo_active()
             if width < 52:
-                text = f"{self._status_indicator()} {snapshot['model_short']} · {duration_label}"
+                text = f"⚕ {snapshot['model_short']} · {duration_label}"
                 if yolo_active:
                     text += " · ⚠ YOLO"
                 return self._trim_status_bar_text(text, width)
             if width < 76:
-                parts = [f"{self._status_indicator()} {snapshot['model_short']}", percent_label]
+                parts = [f"⚕ {snapshot['model_short']}", percent_label]
                 compressions = snapshot.get("compressions", 0)
                 if compressions:
                     parts.append(f"🗜️ {compressions}")
@@ -5215,7 +5207,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 context_label = "ctx --"
 
             compressions = snapshot.get("compressions", 0)
-            parts = [f"{self._status_indicator()} {snapshot['model_short']}", context_label, percent_label]
+            parts = [f"⚕ {snapshot['model_short']}", context_label, percent_label]
             if compressions:
                 parts.append(f"🗜️ {compressions}")
             bg_count = snapshot.get("active_background_tasks", 0)
@@ -5249,7 +5241,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 parts.append("⚠ YOLO")
             return self._trim_status_bar_text(" │ ".join(parts), width)
         except Exception:
-            return f"{self._status_indicator()} {self.model if getattr(self, 'model', None) else 'Hermes'}"
+            return f"⚕ {self.model if getattr(self, 'model', None) else 'Hermes'}"
 
     def _get_status_bar_fragments(self):
         if not self._status_bar_visible or getattr(self, '_model_picker_state', None):
@@ -5267,8 +5259,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
             if width < 52:
                 frags = [
-                    ("class:status-bar", f" {self._status_indicator()} "),
-                    ("class:status-bar-strong", snapshot["model_short"]),
+                    ("class:status-bar", f" ⚕ "),
+                    ("class:status-bar-strong", snapshot['model_short']),
                     ("class:status-bar-dim", " · "),
                     ("class:status-bar-dim", duration_label),
                 ]
@@ -5285,8 +5277,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     subagent_label = self._build_subagent_label(snapshot)
                     frags = [
-                        ("class:status-bar", f" {self._status_indicator()} "),
-                        ("class:status-bar-strong", snapshot["model_short"]),
+                        ("class:status-bar", f" ⚕ "),
+                        ("class:status-bar-strong", snapshot['model_short']),
                         ("class:status-bar-dim", " · "),
                         (self._status_bar_context_style(percent), percent_label),
                     ]
@@ -5324,8 +5316,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     bg_proc_count = snapshot.get("active_background_processes", 0)
                     subagent_label = self._build_subagent_label(snapshot)
                     frags = [
-                        ("class:status-bar", f" {self._status_indicator()} "),
-                        ("class:status-bar-strong", snapshot["model_short"]),
+                        ("class:status-bar", f" ⚕ "),
+                        ("class:status-bar-strong", snapshot['model_short']),
                         ("class:status-bar-dim", " │ "),
                         ("class:status-bar-dim", context_label),
                         ("class:status-bar-dim", " │ "),

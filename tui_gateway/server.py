@@ -1805,8 +1805,8 @@ def _set_session_cwd(session: dict, cwd: str) -> str:
 # Keep aligned with `INDICATOR_STYLES` / `DEFAULT_INDICATOR_STYLE` in
 # ``ui-tui/src/app/interfaces.ts`` — both ends validate against the
 # same shape so `config.get indicator` and the live TUI render agree.
-_INDICATOR_STYLES: tuple[str, ...] = ("ascii", "dot", "emoji", "kaomoji", "unicode")
-_INDICATOR_DEFAULT = "dot"
+_INDICATOR_STYLES: tuple[str, ...] = ("ascii", "emoji", "kaomoji", "unicode")
+_INDICATOR_DEFAULT = "kaomoji"
 
 
 def _load_cfg() -> dict:
