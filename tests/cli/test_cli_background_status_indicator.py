@@ -191,16 +191,20 @@ def test_indicators_independent_agents_and_processes(monkeypatch):
     assert "⚙ 2" in rendered
 
 
-# ── Background/async subagent indicator (⛓ N) ─────────────────────────────
-# Source of truth is tools.async_delegation.active_count() — the count of
-# delegate_task delegations (batch + background single) still in the
-# "running" state. Distinct from ▶ (/background agent threads) and ⚙ (shell
-# processes); all three can be active at once.
+# ── Background/async subagent indicator (🏃N🏁M) ──────────────────────────
+# Source of truth is tools.async_delegation.delegation_stats() — returns
+# running + completed counts for delegate_task delegations (batch +
+# background single). Distinct from ▶ (/background agent threads) and ⚙
+# (shell processes); all three can be active at once.
 
 
-def _patch_async_active(monkeypatch, count: int) -> None:
+def _patch_async_active(monkeypatch, running: int, completed: int = 0) -> None:
     import tools.async_delegation as ad_mod
-    monkeypatch.setattr(ad_mod, "active_count", lambda: count)
+    monkeypatch.setattr(
+        ad_mod,
+        "delegation_stats",
+        lambda: {"running": running, "completed": completed, "total": running + completed},
+    )
 
 
 def test_snapshot_reports_zero_when_no_background_subagents(monkeypatch):
@@ -208,6 +212,7 @@ def test_snapshot_reports_zero_when_no_background_subagents(monkeypatch):
     _patch_async_active(monkeypatch, 0)
     snap = cli_obj._get_status_bar_snapshot()
     assert snap["active_background_subagents"] == 0
+    assert snap["completed_background_subagents"] == 0
 
 
 def test_snapshot_counts_live_background_subagents(monkeypatch):
@@ -217,15 +222,23 @@ def test_snapshot_counts_live_background_subagents(monkeypatch):
     assert snap["active_background_subagents"] == 4
 
 
-def test_snapshot_safe_when_async_active_count_raises(monkeypatch):
-    """If active_count() raises the snapshot stays at 0; no propagate."""
+def test_snapshot_counts_completed_background_subagents(monkeypatch):
+    cli_obj = _make_cli()
+    _patch_async_active(monkeypatch, 3, 2)
+    snap = cli_obj._get_status_bar_snapshot()
+    assert snap["active_background_subagents"] == 3
+    assert snap["completed_background_subagents"] == 2
+
+
+def test_snapshot_safe_when_delegation_stats_raises(monkeypatch):
+    """If delegation_stats() raises the snapshot stays at 0; no propagate."""
     cli_obj = _make_cli()
     import tools.async_delegation as ad_mod
 
     def _boom():
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(ad_mod, "active_count", _boom)
+    monkeypatch.setattr(ad_mod, "delegation_stats", _boom)
     snap = cli_obj._get_status_bar_snapshot()
     assert snap["active_background_subagents"] == 0
 
@@ -234,14 +247,21 @@ def test_plain_text_status_shows_subagent_indicator_when_active(monkeypatch):
     cli_obj = _make_cli()
     _patch_async_active(monkeypatch, 3)
     text = cli_obj._build_status_bar_text(width=80)
-    assert "⛓ 3" in text
+    assert "🏃3" in text
+
+
+def test_plain_text_status_shows_completed_count_in_label(monkeypatch):
+    cli_obj = _make_cli()
+    _patch_async_active(monkeypatch, 3, 2)
+    text = cli_obj._build_status_bar_text(width=80)
+    assert "🏃3🏁2" in text
 
 
 def test_plain_text_status_omits_subagent_indicator_when_idle(monkeypatch):
     cli_obj = _make_cli()
     _patch_async_active(monkeypatch, 0)
     text = cli_obj._build_status_bar_text(width=80)
-    assert "⛓" not in text
+    assert "🏃" not in text
 
 
 def test_fragments_include_subagent_segment_when_active(monkeypatch):
@@ -251,11 +271,21 @@ def test_fragments_include_subagent_segment_when_active(monkeypatch):
     cli_obj._get_tui_terminal_width = lambda: 120  # type: ignore[method-assign]
     frags = cli_obj._get_status_bar_fragments()
     rendered = "".join(text for _style, text in frags)
-    assert "⛓ 2" in rendered
+    assert "🏃2" in rendered
+
+
+def test_fragments_include_completed_count_in_label(monkeypatch):
+    cli_obj = _make_cli()
+    _patch_async_active(monkeypatch, 2, 1)
+    cli_obj._status_bar_visible = True
+    cli_obj._get_tui_terminal_width = lambda: 120  # type: ignore[method-assign]
+    frags = cli_obj._get_status_bar_fragments()
+    rendered = "".join(text for _style, text in frags)
+    assert "🏃2🏁1" in rendered
 
 
 def test_all_three_background_indicators_independent(monkeypatch):
-    """▶ (agent tasks), ⚙ (shell processes), ⛓ (subagents) all coexist."""
+    """▶ (agent tasks), ⚙ (shell processes), 🏃 (subagents) all coexist."""
     cli_obj = _make_cli()
     cli_obj._background_tasks = {"bg_a": _stub_thread()}
     _patch_process_registry(monkeypatch, 2)
@@ -266,5 +296,5 @@ def test_all_three_background_indicators_independent(monkeypatch):
     rendered = "".join(text for _style, text in frags)
     assert "▶ 1" in rendered
     assert "⚙ 2" in rendered
-    assert "⛓ 5" in rendered
+    assert "🏃5" in rendered
 

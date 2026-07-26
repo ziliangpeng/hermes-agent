@@ -114,6 +114,25 @@ describe('StatusRule background-subagent indicator', () => {
     expect(textContent(element)).toContain('🏃3')
   })
 
+  it('renders 🏃N🏁M when subagents are running and some completed', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, active_subagents: 3, completed_subagents: 2 }
+    })
+
+    expect(textContent(element)).toContain('🏃3🏁2')
+  })
+
+  it('renders 🏃N without 🏁 when completed_subagents is 0', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, active_subagents: 3, completed_subagents: 0 }
+    })
+
+    expect(textContent(element)).toContain('🏃3')
+    expect(textContent(element)).not.toContain('🏁')
+  })
+
   it('omits the segment when no subagents are running', () => {
     const element = StatusRule({
       ...baseProps,
