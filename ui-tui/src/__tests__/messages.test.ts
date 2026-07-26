@@ -128,4 +128,9 @@ describe('fmtDuration', () => {
     expect(fmtDuration(129_600_000)).toBe('1d 12h') // 1.5 days
     expect(fmtDuration(97_200_000)).toBe('1d 3h') // 1d 3h
   })
+
+  it('crosses from hours to days at exactly 24h', () => {
+    expect(fmtDuration(86_399_999)).toBe('23h 59m') // just under 24h
+    expect(fmtDuration(86_400_000)).toBe('1d')       // exactly 24h
+  })
 })
