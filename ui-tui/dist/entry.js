@@ -75000,11 +75000,15 @@ function StatusRule({
   const ctxLabel = usage.context_max ? segs.compactCtx ? `${fmtK(usage.context_used ?? 0)} tok` : `${fmtK(usage.context_used ?? 0)}/${fmtK(usage.context_max)}` : usage.total > 0 ? `${fmtK(usage.total)} tok` : "";
   const bar = !segs.compactCtx && usage.context_max ? ctxBar(pct) : "";
   const modelText = modelLabel(model, modelReasoningEffort, modelFast);
+  const subagentCount = typeof usage.active_subagents === "number" ? usage.active_subagents : 0;
+  const completedSubagents = typeof usage.completed_subagents === "number" ? usage.completed_subagents : 0;
+  const subagentLabel = subagentCount > 0 ? completedSubagents > 0 ? `\u{1F3C3}${subagentCount}\u{1F3C1}${completedSubagents}` : `\u{1F3C3}${subagentCount}` : "";
+  const subagentWidth = subagentLabel ? stringWidth(" \u2502 ") + stringWidth(subagentLabel) : 0;
   const showNotice = !busy && !!notice?.text;
   const NOTICE_RESERVE_MAX = 24;
   const noticeReserve = showNotice ? Math.min(stringWidth(notice.text), NOTICE_RESERVE_MAX) : 0;
   const slotWidth = busy ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null) : showNotice ? noticeReserve : stringWidth(status);
-  const essentialWidth = stringWidth("\u2500 ") + slotWidth + stringWidth(" \u2502 ") + stringWidth(modelText) + (ctxLabel ? stringWidth(" \u2502 ") + stringWidth(ctxLabel) : 0);
+  const essentialWidth = stringWidth("\u2500 ") + slotWidth + subagentWidth + stringWidth(" \u2502 ") + stringWidth(modelText) + (ctxLabel ? stringWidth(" \u2502 ") + stringWidth(ctxLabel) : 0);
   const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(cols, cwdLabel, essentialWidth);
   const SEP2 = stringWidth(" \u2502 ");
   let tailBudget = Math.max(0, leftWidth - essentialWidth);
@@ -75025,10 +75029,6 @@ function StatusRule({
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP2 + MAX_DURATION_WIDTH);
   const showIdle = segs.duration && !busy && lastTurnEndedAt != null && fits(SEP2 + stringWidth("\u2713 ") + MAX_DURATION_WIDTH);
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP2 + stringWidth(`cmp ${compressions}`));
-  const subagentCount = typeof usage.active_subagents === "number" ? usage.active_subagents : 0;
-  const completedSubagents = typeof usage.completed_subagents === "number" ? usage.completed_subagents : 0;
-  const subagentLabel = subagentCount > 0 ? completedSubagents > 0 ? `\u{1F3C3}${subagentCount}\u{1F3C1}${completedSubagents}` : `\u{1F3C3}${subagentCount}` : "";
-  const showSubagents = segs.subagents && subagentCount > 0 && fits(SEP2 + stringWidth(subagentLabel));
   const showMemSkl = !!memSklLabel && fits(SEP2 + stringWidth(memSklLabel));
   const showVoice = segs.voice && !!voiceLabel && fits(SEP2 + stringWidth(voiceLabel));
   const showSessionCount = !!sessionCountText && fits(SEP2 + stringWidth(sessionCountText));
@@ -75055,6 +75055,10 @@ function StatusRule({
       ] }),
       showNotice ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Box_default, { flexDirection: "row", flexShrink: 1, overflow: "hidden", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Text, { color: noticeColor(notice.level, t), wrap: "truncate-end", children: notice.text }) }) : null,
       /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Box_default, { flexDirection: "row", flexShrink: 0, children: [
+        subagentLabel ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Text, { color: t.color.muted, wrap: "truncate-end", children: [
+          " \u2502 ",
+          subagentLabel
+        ] }) : null,
         DEV_CREDITS_MODE ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(Text, { color: t.color.warn, wrap: "truncate-end", children: " (dev credits)" }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Text, { color: t.color.muted, wrap: "truncate-end", children: [
           " \u2502 ",
@@ -75089,10 +75093,6 @@ function StatusRule({
           "cmp ",
           compressions
         ] })
-      ] }) : null,
-      showSubagents ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(Text, { color: t.color.muted, wrap: "truncate-end", children: [
-        " \u2502 ",
-        subagentLabel
       ] }) : null,
       showVoice ? /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
         Text,

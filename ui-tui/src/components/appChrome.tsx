@@ -494,6 +494,17 @@ export function StatusRule({
   const bar = !segs.compactCtx && usage.context_max ? ctxBar(pct) : ''
   const modelText = modelLabel(model, modelReasoningEffort, modelFast)
 
+  // Subagent indicator is pinned (always visible when subagents are running),
+  // rendered before the model name so it survives on narrow terminals.
+  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
+  const completedSubagents = typeof usage.completed_subagents === 'number' ? usage.completed_subagents : 0
+  const subagentLabel = subagentCount > 0
+    ? completedSubagents > 0
+      ? `🏃${subagentCount}🏁${completedSubagents}`
+      : `🏃${subagentCount}`
+    : ''
+  const subagentWidth = subagentLabel ? stringWidth(' │ ') + stringWidth(subagentLabel) : 0
+
   // A credits notice replaces the status/verb slot, but only when idle —
   // while busy the FaceTicker always wins (R1 render priority). The notice
   // text carries its own glyph; we only tint it (R1) and let it shrink (R3-M7).
@@ -520,6 +531,7 @@ export function StatusRule({
   const essentialWidth =
     stringWidth('─ ') +
     slotWidth +
+    subagentWidth +
     stringWidth(' │ ') +
     stringWidth(modelText) +
     (ctxLabel ? stringWidth(' │ ') + stringWidth(ctxLabel) : 0)
@@ -569,14 +581,6 @@ export function StatusRule({
     segs.duration && !busy && lastTurnEndedAt != null && fits(SEP + stringWidth('✓ ') + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
-  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
-  const completedSubagents = typeof usage.completed_subagents === 'number' ? usage.completed_subagents : 0
-  const subagentLabel = subagentCount > 0
-    ? completedSubagents > 0
-      ? `🏃${subagentCount}🏁${completedSubagents}`
-      : `🏃${subagentCount}`
-    : ''
-  const showSubagents = segs.subagents && subagentCount > 0 && fits(SEP + stringWidth(subagentLabel))
   const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
@@ -636,8 +640,13 @@ export function StatusRule({
             </Text>
           </Box>
         ) : null}
-        {/* Pinned essentials — model + context never shrink, always visible. */}
+        {/* Pinned essentials — subagent status + model + context never shrink. */}
         <Box flexDirection="row" flexShrink={0}>
+          {subagentLabel ? (
+            <Text color={t.color.muted} wrap="truncate-end">
+              {' │ '}{subagentLabel}
+            </Text>
+          ) : null}
           {DEV_CREDITS_MODE ? (
             <Text color={t.color.warn} wrap="truncate-end">
               {' (dev credits)'}
@@ -678,11 +687,6 @@ export function StatusRule({
             <Text color={compressions >= 10 ? t.color.error : compressions >= 5 ? t.color.warn : t.color.muted}>
               cmp {compressions}
             </Text>
-          </Text>
-        ) : null}
-        {showSubagents ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}{subagentLabel}
           </Text>
         ) : null}
         {showVoice ? (
