@@ -569,10 +569,6 @@ export function StatusRule({
     segs.duration && !busy && lastTurnEndedAt != null && fits(SEP + stringWidth('✓ ') + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
-  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
-  const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
-  const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
-  const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
   const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
   const completedSubagents = typeof usage.completed_subagents === 'number' ? usage.completed_subagents : 0
   const subagentLabel = subagentCount > 0
@@ -581,6 +577,10 @@ export function StatusRule({
       : `🏃${subagentCount}`
     : ''
   const showSubagents = segs.subagents && subagentCount > 0 && fits(SEP + stringWidth(subagentLabel))
+  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
+  const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
+  const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
+  const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
 
   // Parked-background reassurance: a top-level delegate_task runs in the
   // background, so the turn ends (idle) while the subagent keeps working and its
@@ -680,6 +680,11 @@ export function StatusRule({
             </Text>
           </Text>
         ) : null}
+        {showSubagents ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}{subagentLabel}
+          </Text>
+        ) : null}
         {showVoice ? (
           <Text
             color={
@@ -696,11 +701,6 @@ export function StatusRule({
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {bgCount} bg
-          </Text>
-        ) : null}
-        {showSubagents ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}{subagentLabel}
           </Text>
         ) : null}
         {showResumeHint ? (
