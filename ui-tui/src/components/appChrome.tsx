@@ -591,7 +591,7 @@ export function StatusRule({
   // result re-enters as a fresh turn later. When idle with work still in flight,
   // spell out that the agent resumes on its own — no spinner, nothing to poll.
   // Width-budgeted like every tail segment, so it drops first on a tight
-  // terminal where ⛓ already carries the signal.
+  // terminal where 🏃 already carries the signal.
   const resumeHintText =
     subagentCount === 1 ? '↩ resumes when subagent finishes' : `↩ resumes when ${subagentCount} subagents finish`
 

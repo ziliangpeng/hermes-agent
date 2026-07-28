@@ -11148,7 +11148,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         """Render file edits with inline diff after write-capable tools complete."""
         # A top-level delegate_task dispatches in the background and re-enters as
         # a fresh turn when done. Say so once — no spinner, nothing to poll — so
-        # the idle prompt doesn't read as "nothing happened" (⛓ tracks the work).
+        # the idle prompt doesn't read as "nothing happened" (🏃 tracks the work).
         if function_name == "delegate_task":
             try:
                 parsed = json.loads(function_result) if isinstance(function_result, str) else (function_result or {})
