@@ -197,6 +197,36 @@ describe('StatusRule background-subagent indicator', () => {
   })
 })
 
+describe('StatusRule voice label', () => {
+  it('hides the voice segment when voiceLabel is empty (off)', () => {
+    const element = StatusRule({ ...baseProps, voiceLabel: '' })
+    expect(textContent(element)).not.toContain('🎤')
+    expect(textContent(element)).not.toContain('📢')
+    expect(textContent(element)).not.toContain('🔴')
+    expect(textContent(element)).not.toContain('🟡')
+  })
+
+  it('shows 🎤 when voice is on', () => {
+    const element = StatusRule({ ...baseProps, voiceLabel: '🎤' })
+    expect(textContent(element)).toContain('🎤')
+  })
+
+  it('shows 📢 when voice is on with TTS', () => {
+    const element = StatusRule({ ...baseProps, voiceLabel: '📢' })
+    expect(textContent(element)).toContain('📢')
+  })
+
+  it('shows 🔴 when recording', () => {
+    const element = StatusRule({ ...baseProps, voiceLabel: '🔴' })
+    expect(textContent(element)).toContain('🔴')
+  })
+
+  it('shows 🟡 when STT is processing', () => {
+    const element = StatusRule({ ...baseProps, voiceLabel: '🟡' })
+    expect(textContent(element)).toContain('🟡')
+  })
+})
+
 describe('StatusRule session count click target', () => {
   it('makes the live session count itself clickable', () => {
     const openSwitcher = vi.fn()
@@ -248,7 +278,7 @@ describe('StatusRule session count click target', () => {
         output: 0,
         total: 50_000
       },
-      voiceLabel: 'voice off'
+      voiceLabel: ''
     })
 
     const rendered = textContent(element)
