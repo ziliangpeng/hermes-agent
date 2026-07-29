@@ -255,7 +255,7 @@ describe('StatusRule session count click target', () => {
 
     // Must-keep essentials survive intact …
     expect(rendered).toContain('ready')
-    expect(rendered).toContain('opus 4.8')
+    expect(rendered).toContain('o4.8')
     // … while the low-value tail (session count) is dropped, not truncated.
     expect(rendered).not.toContain('3 sessions')
   })
@@ -274,7 +274,7 @@ describe('StatusRule credits notice render priority', () => {
     expect(rendered).toContain('✕ credits exhausted')
     expect(rendered).not.toContain('ready')
     // … but model + context stay visible.
-    expect(rendered).toContain('opus 4.8')
+    expect(rendered).toContain('o4.8')
     expect(rendered).toContain('50k')
   })
 
@@ -291,7 +291,7 @@ describe('StatusRule credits notice render priority', () => {
     // Notice must NOT render while busy.
     expect(rendered).not.toContain('⚠ 90% used')
     // Model still visible.
-    expect(rendered).toContain('opus 4.8')
+    expect(rendered).toContain('o4.8')
   })
 
   it('colours the notice by level (error → theme error, success → statusGood)', () => {
@@ -367,7 +367,7 @@ describe('StatusRule credits notice render priority', () => {
     expect(shrinkBox).not.toBeNull()
 
     // Model survives on a narrow terminal because the notice yields.
-    expect(textContent(element)).toContain('opus 4.8')
+    expect(textContent(element)).toContain('o4.8')
   })
 })
 
