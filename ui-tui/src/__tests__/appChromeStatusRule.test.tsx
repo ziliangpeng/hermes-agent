@@ -373,8 +373,9 @@ describe('StatusRule credits notice render priority', () => {
 
 describe('StatusRule idle-since read-out', () => {
   // The IdleSince component uses hooks, so it can't be invoked outside a
-  // renderer — assert on the element tree instead (same reason the duration
-  // tests don't check SessionDuration's text).
+  // renderer — assert on the element tree instead.  The idle clock now lives
+  // inside the status slot (`🔥 ready 5m`) rather than as a standalone tail
+  // segment, so IdleSince is found as a child of the status <Text>.
   const findComponentByName = (node: ReactNodeLike, name: string): React.ReactElement | null => {
     if (node === null || node === undefined || typeof node === 'boolean') {
       return null
@@ -416,6 +417,11 @@ describe('StatusRule idle-since read-out', () => {
 
     expect(idle).not.toBeNull()
     expect(idle!.props.endedAt).toBe(endedAt)
+    // Idle clock lives in the status slot now (🔥 ready 42s), not a standalone
+    // segment — ✓ glyph must be gone.
+    const rendered = textContent(element)
+    expect(rendered).not.toContain('✓')
+    expect(rendered).toContain('ready')
   })
 
   it('is hidden while a turn is busy', () => {

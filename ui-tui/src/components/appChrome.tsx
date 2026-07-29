@@ -354,7 +354,10 @@ function IdleSince({ endedAt }: { endedAt: number }) {
     return () => clearInterval(id)
   }, [endedAt])
 
-  return `✓ ${fmtDuration(now - endedAt)}`
+  // Leading space separates the duration from the status text (e.g.
+  // `🔥 ready 5m`). The `✓` glyph is dropped — the idle clock now lives
+  // inside the status slot, not as a standalone tail segment.
+  return ` ${fmtDuration(now - endedAt)}`
 }
 
 const effortLabel = (effort?: string) => {
@@ -527,7 +530,7 @@ export function StatusRule({
     ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null)
     : showNotice
       ? noticeReserve
-      : stringWidth('🔥 ' + status)
+      : stringWidth('🔥 ' + status) + (lastTurnEndedAt != null ? 1 + MAX_DURATION_WIDTH : 0)
 
   const essentialWidth =
     slotWidth +
@@ -572,12 +575,6 @@ export function StatusRule({
   const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
 
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
-
-  // Idle clock — time since the last final agent response. Hidden while busy
-  // (the FaceTicker's elapsed tail covers the live turn) and before the first
-  // turn completes. Shares the duration breakpoint and width reservation.
-  const showIdle =
-    segs.duration && !busy && lastTurnEndedAt != null && fits(SEP + stringWidth('✓ ') + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
   const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
@@ -625,6 +622,7 @@ export function StatusRule({
           ) : showNotice ? null : (
             <Text color={statusColor} wrap="truncate-end">
               🔥 {status}
+              {lastTurnEndedAt != null ? <IdleSince endedAt={lastTurnEndedAt} /> : null}
             </Text>
           )}
         </Box>
@@ -665,12 +663,6 @@ export function StatusRule({
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             <SessionDuration startedAt={sessionStartedAt!} />
-          </Text>
-        ) : null}
-        {showIdle ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}
-            <IdleSince endedAt={lastTurnEndedAt!} />
           </Text>
         ) : null}
         {showCompressions ? (
