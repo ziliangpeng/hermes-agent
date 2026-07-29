@@ -495,6 +495,17 @@ export function StatusRule({
   const bar = !segs.compactCtx && usage.context_max ? ctxBar(pct) : ''
   const modelText = modelLabel(model, modelReasoningEffort, modelFast)
 
+  // Subagent indicator is pinned (always visible when subagents are running),
+  // rendered before the model name so it survives on narrow terminals.
+  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
+  const completedSubagents = typeof usage.completed_subagents === 'number' ? usage.completed_subagents : 0
+  const subagentLabel = subagentCount > 0
+    ? completedSubagents > 0
+      ? `🏃${subagentCount}🏁${completedSubagents}`
+      : `🏃${subagentCount}`
+    : ''
+  const subagentWidth = subagentLabel ? stringWidth(' │ ') + stringWidth(subagentLabel) : 0
+
   // A credits notice replaces the status/verb slot, but only when idle —
   // while busy the FaceTicker always wins (R1 render priority). The notice
   // text carries its own glyph; we only tint it (R1) and let it shrink (R3-M7).
@@ -521,6 +532,7 @@ export function StatusRule({
   const essentialWidth =
     stringWidth('─ ') +
     slotWidth +
+    subagentWidth +
     stringWidth(' │ ') +
     stringWidth(modelText) +
     (ctxLabel ? stringWidth(' │ ') + stringWidth(ctxLabel) : 0)
@@ -574,15 +586,13 @@ export function StatusRule({
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
   const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
-  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
-  const showSubagents = segs.subagents && subagentCount > 0 && fits(SEP + stringWidth(`⛓ ${subagentCount}`))
 
   // Parked-background reassurance: a top-level delegate_task runs in the
   // background, so the turn ends (idle) while the subagent keeps working and its
   // result re-enters as a fresh turn later. When idle with work still in flight,
   // spell out that the agent resumes on its own — no spinner, nothing to poll.
   // Width-budgeted like every tail segment, so it drops first on a tight
-  // terminal where ⛓ already carries the signal.
+  // terminal where 🏃 already carries the signal.
   const resumeHintText =
     subagentCount === 1 ? '↩ resumes when subagent finishes' : `↩ resumes when ${subagentCount} subagents finish`
 
@@ -631,8 +641,13 @@ export function StatusRule({
             </Text>
           </Box>
         ) : null}
-        {/* Pinned essentials — model + context never shrink, always visible. */}
+        {/* Pinned essentials — subagent status + model + context never shrink. */}
         <Box flexDirection="row" flexShrink={0}>
+          {subagentLabel ? (
+            <Text color={t.color.muted} wrap="truncate-end">
+              {' │ '}{subagentLabel}
+            </Text>
+          ) : null}
           {DEV_CREDITS_MODE ? (
             <Text color={t.color.warn} wrap="truncate-end">
               {' (dev credits)'}
@@ -691,11 +706,6 @@ export function StatusRule({
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {bgCount} bg
-          </Text>
-        ) : null}
-        {showSubagents ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}⛓ {subagentCount}
           </Text>
         ) : null}
         {showResumeHint ? (

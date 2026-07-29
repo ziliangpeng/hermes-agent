@@ -168,6 +168,7 @@ export interface SessionInfo {
 
 export interface Usage {
   active_subagents?: number
+  completed_subagents?: number
   calls: number
   cache_read?: number
   cache_write?: number

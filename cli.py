@@ -4607,6 +4607,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "active_background_tasks": 0,
             "active_background_processes": 0,
             "active_background_subagents": 0,
+            "completed_background_subagents": 0,
             "memory_chars": None,
             "memory_limit": None,
             "user_chars": None,
@@ -4634,11 +4635,13 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
         # Count live background/async subagents (delegate_task batches and
         # background single delegations tracked by tools.async_delegation).
-        # active_count() iterates an in-memory records dict under a lock —
-        # cheap and only counts records still in the "running" state.
+        # delegation_stats() iterates an in-memory records dict under a lock —
+        # cheap and returns running + completed counts.
         try:
-            from tools.async_delegation import active_count as _async_active_count
-            snapshot["active_background_subagents"] = _async_active_count()
+            from tools.async_delegation import delegation_stats as _delegation_stats
+            stats = _delegation_stats()
+            snapshot["active_background_subagents"] = stats["running"]
+            snapshot["completed_background_subagents"] = stats["completed"]
         except Exception:
             pass
 
@@ -4754,6 +4757,25 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         if n is None:
             return None
         return f"S{n}"
+
+    @staticmethod
+    def _build_subagent_label(snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render compact subagent stats: '🏃N' or '🏃N🏁M'.
+
+        - ``running`` (🏃): async delegations still executing.
+        - ``completed`` (🏁): recently finished delegations (retained tail).
+        Only shown when there are running subagents; completed count
+        appears alongside running to give batch progress context.
+        """
+        running = snapshot.get("active_background_subagents", 0) or 0
+        completed = snapshot.get("completed_background_subagents", 0) or 0
+        if not running:
+            return None
+        # When subagents are running, show both counts so the user can
+        # see batch progress (e.g. 3 running, 2 done → 3 of 5 dispatched).
+        if completed:
+            return f"🏃{running}🏁{completed}"
+        return f"🏃{running}"
 
     @classmethod
     def _trim_status_bar_text(cls, text: str, max_width: int) -> str:
@@ -5169,9 +5191,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                 bg_proc_count = snapshot.get("active_background_processes", 0)
                 if bg_proc_count:
                     parts.append(f"⚙ {bg_proc_count}")
-                bg_subagent_count = snapshot.get("active_background_subagents", 0)
-                if bg_subagent_count:
-                    parts.append(f"⛓ {bg_subagent_count}")
+                subagent_label = self._build_subagent_label(snapshot)
+                if subagent_label:
+                    parts.append(subagent_label)
                 parts.append(duration_label)
                 if yolo_active:
                     parts.append("⚠ YOLO")
@@ -5194,9 +5216,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             bg_proc_count = snapshot.get("active_background_processes", 0)
             if bg_proc_count:
                 parts.append(f"⚙ {bg_proc_count}")
-            bg_subagent_count = snapshot.get("active_background_subagents", 0)
-            if bg_subagent_count:
-                parts.append(f"⛓ {bg_subagent_count}")
+            subagent_label = self._build_subagent_label(snapshot)
+            if subagent_label:
+                parts.append(subagent_label)
             mem_label = self._build_memory_label(snapshot)
             if mem_label:
                 parts.append(mem_label)
@@ -5253,7 +5275,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     compressions = snapshot.get("compressions", 0)
                     bg_count = snapshot.get("active_background_tasks", 0)
                     bg_proc_count = snapshot.get("active_background_processes", 0)
-                    bg_subagent_count = snapshot.get("active_background_subagents", 0)
+                    subagent_label = self._build_subagent_label(snapshot)
                     frags = [
                         ("class:status-bar", " ⚕ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
@@ -5269,9 +5291,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     if bg_proc_count:
                         frags.append(("class:status-bar-dim", " · "))
                         frags.append(("class:status-bar-strong", f"⚙ {bg_proc_count}"))
-                    if bg_subagent_count:
+                    if subagent_label:
                         frags.append(("class:status-bar-dim", " · "))
-                        frags.append(("class:status-bar-strong", f"⛓ {bg_subagent_count}"))
+                        frags.append(("class:status-bar-strong", subagent_label))
                     frags.extend([
                         ("class:status-bar-dim", " · "),
                         ("class:status-bar-dim", duration_label),
@@ -5292,7 +5314,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     compressions = snapshot.get("compressions", 0)
                     bg_count = snapshot.get("active_background_tasks", 0)
                     bg_proc_count = snapshot.get("active_background_processes", 0)
-                    bg_subagent_count = snapshot.get("active_background_subagents", 0)
+                    subagent_label = self._build_subagent_label(snapshot)
                     frags = [
                         ("class:status-bar", " ⚕ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
@@ -5312,9 +5334,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
                     if bg_proc_count:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-strong", f"⚙ {bg_proc_count}"))
-                    if bg_subagent_count:
+                    if subagent_label:
                         frags.append(("class:status-bar-dim", " │ "))
-                        frags.append(("class:status-bar-strong", f"⛓ {bg_subagent_count}"))
+                        frags.append(("class:status-bar-strong", subagent_label))
                     mem_label = self._build_memory_label(snapshot)
                     if mem_label:
                         frags.append(("class:status-bar-dim", " │ "))
@@ -11127,7 +11149,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         """Render file edits with inline diff after write-capable tools complete."""
         # A top-level delegate_task dispatches in the background and re-enters as
         # a fresh turn when done. Say so once — no spinner, nothing to poll — so
-        # the idle prompt doesn't read as "nothing happened" (⛓ tracks the work).
+        # the idle prompt doesn't read as "nothing happened" (🏃 tracks the work).
         if function_name == "delegate_task":
             try:
                 parsed = json.loads(function_result) if isinstance(function_result, str) else (function_result or {})

@@ -8472,11 +8472,11 @@ def test_start_agent_build_passes_session_model_override(monkeypatch):
         server._sessions.clear()
 
 
-# ── _get_usage active_subagents (TUI status-bar ⛓ indicator) ──────────────
-# Mirrors the classic CLI status bar: _get_usage embeds a live count of
-# background/async subagents from tools.async_delegation.active_count() so the
-# Ink status bar can render ⛓ N. Source of truth is the same registry the CLI
-# reads; the field rides the existing per-update `usage` payload.
+# ── _get_usage active_subagents (TUI status-bar 🏃N🏁M indicator) ───────────
+# Mirrors the classic CLI status bar: _get_usage embeds live counts of
+# background/async subagents from tools.async_delegation.delegation_stats() so
+# the Ink status bar can render 🏃N🏁M. Source of truth is the same registry
+# the CLI reads; the fields ride the existing per-update `usage` payload.
 
 
 class _BareAgent:
@@ -8488,28 +8488,49 @@ class _BareAgent:
 
 def test_get_usage_includes_active_subagents(monkeypatch):
     import tools.async_delegation as ad_mod
-    monkeypatch.setattr(ad_mod, "active_count", lambda: 4)
+    monkeypatch.setattr(
+        ad_mod,
+        "delegation_stats",
+        lambda: {"running": 4, "completed": 0, "total": 4},
+    )
     usage = server._get_usage(_BareAgent())
     assert usage["active_subagents"] == 4
+    assert usage["completed_subagents"] == 0
+
+
+def test_get_usage_includes_completed_subagents(monkeypatch):
+    import tools.async_delegation as ad_mod
+    monkeypatch.setattr(
+        ad_mod,
+        "delegation_stats",
+        lambda: {"running": 3, "completed": 2, "total": 5},
+    )
+    usage = server._get_usage(_BareAgent())
+    assert usage["active_subagents"] == 3
+    assert usage["completed_subagents"] == 2
 
 
 def test_get_usage_active_subagents_zero(monkeypatch):
     import tools.async_delegation as ad_mod
-    monkeypatch.setattr(ad_mod, "active_count", lambda: 0)
+    monkeypatch.setattr(
+        ad_mod,
+        "delegation_stats",
+        lambda: {"running": 0, "completed": 0, "total": 0},
+    )
     usage = server._get_usage(_BareAgent())
     assert usage["active_subagents"] == 0
 
 
-def test_get_usage_safe_when_active_count_raises(monkeypatch):
-    """A raising active_count() must not break the usage payload."""
+def test_get_usage_safe_when_delegation_stats_raises(monkeypatch):
+    """A raising delegation_stats() must not break the usage payload."""
     import tools.async_delegation as ad_mod
 
     def _boom():
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(ad_mod, "active_count", _boom)
+    monkeypatch.setattr(ad_mod, "delegation_stats", _boom)
     usage = server._get_usage(_BareAgent())
-    # Field omitted, but the rest of the payload is intact.
+    # Fields omitted, but the rest of the payload is intact.
     assert "active_subagents" not in usage
     assert usage["model"] == "x"
 

@@ -3114,10 +3114,12 @@ def _get_usage(agent) -> dict:
         usage["compressions"] = getattr(comp, "compression_count", 0) or 0
     # Live count of background/async subagents still running (delegate_task
     # batches + background single delegations). Mirrors the classic CLI status
-    # bar's ⛓ indicator; sourced from the same async_delegation registry.
+    # bar's 🏃N🏁M indicator; sourced from the same async_delegation registry.
     try:
-        from tools.async_delegation import active_count as _async_active_count
-        usage["active_subagents"] = _async_active_count()
+        from tools.async_delegation import delegation_stats as _delegation_stats
+        stats = _delegation_stats()
+        usage["active_subagents"] = stats["running"]
+        usage["completed_subagents"] = stats["completed"]
         store = getattr(agent, "_memory_store", None)
         if store is not None:
             if hasattr(store, "refresh_live_from_disk"):
