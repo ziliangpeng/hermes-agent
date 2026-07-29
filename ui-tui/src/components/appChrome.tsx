@@ -53,7 +53,7 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
     return {
       frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? '⚕ ',
       intervalMs: SPINNER_TICK_MS * 6,
-      showVerb: true
+      showVerb: false
     }
   }
 
@@ -111,8 +111,8 @@ export const MAX_DURATION_WIDTH = Math.max(
 export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
   const { showVerb } = renderIndicator(style, 0)
   const verb = showVerb ? 1 + VERB_PAD_LEN : 0
-  // ` · ` plus the bounded clock (e.g. `59m 59s`).
-  const duration = hasDuration ? stringWidth(' · ') + MAX_DURATION_WIDTH : 0
+  // ` ` plus the bounded clock (e.g. `59m 59s`).
+  const duration = hasDuration ? stringWidth(' ') + MAX_DURATION_WIDTH : 0
 
   return indicatorFrameWidth(style) + verb + duration
 }
@@ -152,7 +152,7 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
   // IS shown, its trailing padding already provides the gap, so the extra
   // space is harmless.
-  const durationSegment = startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''
+  const durationSegment = startedAt ? ` ${fmtDuration(now - startedAt)}` : ''
 
   return (
     <Text color={color}>
@@ -527,10 +527,9 @@ export function StatusRule({
     ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null)
     : showNotice
       ? noticeReserve
-      : stringWidth(status)
+      : stringWidth('🔥 ' + status)
 
   const essentialWidth =
-    stringWidth('─ ') +
     slotWidth +
     subagentWidth +
     stringWidth(' │ ') +
@@ -622,12 +621,11 @@ export function StatusRule({
             renders as a separate shrinkable box below so a long notice
             ellipsizes instead of crushing model │ ctx (R3-M7). */}
         <Box flexDirection="row" flexShrink={0}>
-          <Text color={t.color.border}>{'─ '}</Text>
           {busy ? (
             <FaceTicker color={statusColor} startedAt={turnStartedAt} style={indicatorStyle} />
           ) : showNotice ? null : (
             <Text color={statusColor} wrap="truncate-end">
-              {status}
+              🔥 {status}
             </Text>
           )}
         </Box>
