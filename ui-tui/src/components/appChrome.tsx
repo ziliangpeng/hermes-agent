@@ -571,7 +571,6 @@ export function StatusRule({
   const skillsStr = skillsLabel(usage)
   const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
 
-  const showBar = !!bar && fits(SEP + stringWidth(`[${bar}] ${pct != null ? `${pct}%` : ''}`))
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
 
   // Idle clock — time since the last final agent response. Hidden while busy
@@ -656,18 +655,12 @@ export function StatusRule({
             {modelText}
           </Text>
           {ctxLabel ? (
-            <Text color={t.color.muted} wrap="truncate-end">
+            <Text color={barColor} wrap="truncate-end">
               {' │ '}
               {ctxLabel}
             </Text>
           ) : null}
         </Box>
-        {showBar ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}
-            <Text color={barColor}>[{bar}]</Text> <Text color={barColor}>{pct != null ? `${pct}%` : ''}</Text>
-          </Text>
-        ) : null}
         {showDuration ? (
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
