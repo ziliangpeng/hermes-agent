@@ -417,6 +417,11 @@ describe('StatusRule idle-since read-out', () => {
 
     expect(idle).not.toBeNull()
     expect(idle!.props.endedAt).toBe(endedAt)
+    // Idle clock lives in the status slot now (🔥 ready 42s), not a standalone
+    // segment — ✓ glyph must be gone.
+    const rendered = textContent(element)
+    expect(rendered).not.toContain('✓')
+    expect(rendered).toContain('ready')
   })
 
   it('is hidden while a turn is busy', () => {
