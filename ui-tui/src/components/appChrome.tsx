@@ -674,12 +674,7 @@ export function StatusRule({
           </Text>
         ) : null}
         {showVoice ? (
-          <Text
-            color={
-              voiceLabel!.startsWith('●') ? t.color.error : voiceLabel!.startsWith('◉') ? t.color.warn : t.color.muted
-            }
-            wrap="truncate-end"
-          >
+          <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {voiceLabel}
           </Text>
