@@ -1112,8 +1112,7 @@ export function useMainApp(gw: GatewayClient) {
       statusColor: statusColorOf(ui.status, ui.theme.color),
       stickyPrompt,
       turnStartedAt: ui.sid ? turnStartedAt : null,
-      // CLI parity: the classic prompt_toolkit status bar shows a red dot
-      // on REC (cli.py:_get_voice_status_fragments line 2344).
+      // Emoji voice indicators (diverges from CLI's ● REC / ◉ STT text labels).
       voiceLabel: voiceRecording
         ? '🔴'
         : voiceProcessing
