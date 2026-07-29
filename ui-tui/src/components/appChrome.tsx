@@ -559,7 +559,7 @@ export function StatusRule({
     return false
   }
 
-  const sessionCountText = liveSessionCount > 0 ? statusSessionCountLabel(liveSessionCount) : ''
+  const sessionCountText = liveSessionCount > 1 ? statusSessionCountLabel(liveSessionCount) : ''
   const compressions = typeof usage.compressions === 'number' ? usage.compressions : 0
 
   // Dev-only readout (HERMES_DEV_CREDITS). The server omits the key entirely unless the

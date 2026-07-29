@@ -236,7 +236,7 @@ describe('StatusRule session count click target', () => {
       busy: false,
       cols: 100,
       cwdLabel: '~/repo',
-      liveSessionCount: 1,
+      liveSessionCount: 2,
       model: 'kimi-k2.6',
       onSessionCountClick: openSwitcher,
       sessionStartedAt: null,
@@ -248,7 +248,7 @@ describe('StatusRule session count click target', () => {
       voiceLabel: ''
     })
 
-    const clickableSessionCount = findClickableWithText(element, '1 session')
+    const clickableSessionCount = findClickableWithText(element, '2 sessions')
 
     expect(clickableSessionCount).not.toBeNull()
     clickableSessionCount!.props.onClick({ stopImmediatePropagation: vi.fn() })
