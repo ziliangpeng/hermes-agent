@@ -584,10 +584,8 @@ export function StatusRule({
 
   // Parked-background reassurance: a top-level delegate_task runs in the
   // background, so the turn ends (idle) while the subagent keeps working and its
-  // result re-enters as a fresh turn later. When idle with work still in flight,
-  // spell out that the agent resumes on its own — no spinner, nothing to poll.
-  // Width-budgeted like every tail segment, so it drops first on a tight
-  // terminal where 🏃 already carries the signal.
+  // result re-enters as a fresh turn later. A bare ↩ arrow signals the agent
+  // will auto-resume — no spinner, nothing to poll. 🏃N carries the count.
   const resumeHintText = '↩'
 
   const showResumeHint = !busy && subagentCount > 0 && fits(SEP + stringWidth(resumeHintText))

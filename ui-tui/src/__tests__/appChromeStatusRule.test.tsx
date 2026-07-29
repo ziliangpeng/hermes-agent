@@ -151,15 +151,6 @@ describe('StatusRule background-subagent indicator', () => {
   it('shows the ↩ resume hint when idle with subagents in flight', () => {
     const element = StatusRule({
       ...baseProps,
-      usage: { ...baseProps.usage, active_subagents: 1 }
-    })
-
-    expect(textContent(element)).toContain('↩')
-  })
-
-  it('shows the ↩ resume hint for multiple in-flight subagents', () => {
-    const element = StatusRule({
-      ...baseProps,
       usage: { ...baseProps.usage, active_subagents: 3 }
     })
 
