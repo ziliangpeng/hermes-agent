@@ -255,6 +255,16 @@ describe('StatusRule session count click target', () => {
     expect(openSwitcher).toHaveBeenCalledOnce()
   })
 
+  it('self-hides when only 1 active session', () => {
+    const element = StatusRule({
+      ...baseProps,
+      liveSessionCount: 1,
+      onSessionCountClick: vi.fn()
+    })
+
+    expect(textContent(element)).not.toContain('1 session')
+  })
+
   it('keeps status + model and drops the low-value tail on a narrow terminal', () => {
     const element = StatusRule({
       bgCount: 0,
