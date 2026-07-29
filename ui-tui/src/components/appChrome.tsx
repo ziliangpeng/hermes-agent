@@ -530,7 +530,7 @@ export function StatusRule({
       : stringWidth(status)
 
   const essentialWidth =
-    stringWidth('─ ') +
+    stringWidth('🔥 ') +
     slotWidth +
     subagentWidth +
     stringWidth(' │ ') +
@@ -622,7 +622,7 @@ export function StatusRule({
             renders as a separate shrinkable box below so a long notice
             ellipsizes instead of crushing model │ ctx (R3-M7). */}
         <Box flexDirection="row" flexShrink={0}>
-          <Text color={t.color.border}>{'─ '}</Text>
+          <Text>{'🔥 '}</Text>
           {busy ? (
             <FaceTicker color={statusColor} startedAt={turnStartedAt} style={indicatorStyle} />
           ) : showNotice ? null : (
@@ -734,7 +734,7 @@ export function StatusRule({
 
       {rightWidth > 0 ? (
         <>
-          <Text color={t.color.border}>{separatorWidth >= 3 ? ' ─ ' : ' '}</Text>
+          <Text>{separatorWidth >= 3 ? ' 🔥 ' : ' '}</Text>
           <Box flexShrink={0} width={rightWidth}>
             <Text color={t.color.label} wrap="truncate-end">
               {cwdLabel}
