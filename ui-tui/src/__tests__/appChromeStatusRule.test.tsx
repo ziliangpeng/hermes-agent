@@ -148,22 +148,22 @@ describe('StatusRule background-subagent indicator', () => {
     expect(textContent(element)).not.toContain('🏃')
   })
 
-  it('spells out the auto-resume hint when idle with subagents in flight', () => {
+  it('shows the ↩ resume hint when idle with subagents in flight', () => {
     const element = StatusRule({
       ...baseProps,
       usage: { ...baseProps.usage, active_subagents: 1 }
     })
 
-    expect(textContent(element)).toContain('resumes when subagent finishes')
+    expect(textContent(element)).toContain('↩')
   })
 
-  it('pluralizes the resume hint for multiple in-flight subagents', () => {
+  it('shows the ↩ resume hint for multiple in-flight subagents', () => {
     const element = StatusRule({
       ...baseProps,
       usage: { ...baseProps.usage, active_subagents: 3 }
     })
 
-    expect(textContent(element)).toContain('resumes when 3 subagents finish')
+    expect(textContent(element)).toContain('↩')
   })
 
   it('hides the resume hint mid-turn (a busy turn owns the indicator)', () => {
@@ -174,13 +174,13 @@ describe('StatusRule background-subagent indicator', () => {
       usage: { ...baseProps.usage, active_subagents: 2 }
     })
 
-    expect(textContent(element)).not.toContain('resumes when')
+    expect(textContent(element)).not.toContain('↩')
   })
 
   it('omits the resume hint when no subagents are running', () => {
     const element = StatusRule({ ...baseProps })
 
-    expect(textContent(element)).not.toContain('resumes when')
+    expect(textContent(element)).not.toContain('↩')
   })
 
   it('keeps the subagent segment on a narrow terminal (pinned before model)', () => {
