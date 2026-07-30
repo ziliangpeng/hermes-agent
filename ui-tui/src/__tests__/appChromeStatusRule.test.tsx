@@ -630,12 +630,22 @@ describe('StatusRule session duration', () => {
 
   it('hides duration when sessionStartedAt is null', () => {
     const element = StatusRule({ ...baseProps, sessionStartedAt: null })
-    // Duration segment should not appear — baseProps has sessionStartedAt: null
-    // and we can verify by checking it doesn't contain a duration-like pattern
-    const rendered = textContent(element)
-    // The status slot has '5m 0s' from idle, but the duration segment
-    // would add ' │ Xm Ym' — we just verify no crash
-    expect(rendered).toContain('ready')
+    // SessionDuration component should not be in the tree
+    const findComp = (node: ReactNodeLike): any => {
+      if (!node || typeof node !== 'object') return null
+      if ((node as any).type?.name === 'SessionDuration') return node
+      const children = (node as any).props?.children
+      if (Array.isArray(children)) {
+        for (const c of children) {
+          const found = findComp(c)
+          if (found) return found
+        }
+      } else if (children) {
+        return findComp(children)
+      }
+      return null
+    }
+    expect(findComp(element)).toBeNull()
   })
 })
 
@@ -663,7 +673,9 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 5 }
     })
-    expect(textContent(element)).toContain('cmp 5')
+    const cmpEl = findElementWithText(element, 'cmp 5')
+    expect(cmpEl).not.toBeNull()
+    expect(cmpEl?.props.color).toBe(DEFAULT_THEME.color.warn)
   })
 
   it('shows compressions at error threshold (10)', () => {
@@ -671,7 +683,9 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 10 }
     })
-    expect(textContent(element)).toContain('cmp 10')
+    const cmpEl = findElementWithText(element, 'cmp 10')
+    expect(cmpEl).not.toBeNull()
+    expect(cmpEl?.props.color).toBe(DEFAULT_THEME.color.error)
   })
 })
 

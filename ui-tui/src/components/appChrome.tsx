@@ -589,7 +589,6 @@ export function StatusRule({
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
-  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
   const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
@@ -601,9 +600,12 @@ export function StatusRule({
   const resumeHintText = '↩'
 
   const showResumeHint = !busy && subagentCount > 0 && fits(SEP + stringWidth(resumeHintText))
-  // Dev-gated readout (HERMES_DEV_CREDITS), lowest priority,
-  // so it consumes tail budget LAST and drops first on a narrow terminal.
+  // Dev-gated readout (HERMES_DEV_CREDITS), low priority.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
+
+  // memSkl is the most peripheral tail segment — evaluate last so it drops
+  // first on narrow terminals, matching its render position (dead last).
+  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
 
   const handleSessionCountClick = (event: { stopImmediatePropagation?: () => void }) => {
     event.stopImmediatePropagation?.()
