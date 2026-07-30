@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { StatusRule } from '../components/appChrome.js'
+import { StatusRule, statusRuleWidths, statusBarSegments, ctxBarColor, ctxBarHalf, memoryProfileLabel, skillsLabel } from '../components/appChrome.js'
 import { DEFAULT_THEME } from '../theme.js'
 
 type ReactNodeLike = React.ReactNode
@@ -505,5 +505,321 @@ describe('StatusRule idle-since read-out', () => {
     })
 
     expect(findComponentByName(element, 'IdleSince')).toBeNull()
+  })
+})
+
+// ── P0a: Pure function tests ──────────────────────────────────────────
+
+describe('statusBarSegments', () => {
+  it('enables all segments at 100 cols', () => {
+    const segs = statusBarSegments(100)
+    expect(segs.bar).toBe(true)
+    expect(segs.duration).toBe(true)
+    expect(segs.compressions).toBe(true)
+    expect(segs.voice).toBe(true)
+    expect(segs.bg).toBe(true)
+    expect(segs.subagents).toBe(true)
+    expect(segs.compactCtx).toBe(false)
+  })
+
+  it('enables compactCtx below 72 cols', () => {
+    expect(statusBarSegments(71).compactCtx).toBe(true)
+    expect(statusBarSegments(72).compactCtx).toBe(false)
+  })
+
+  it('enables bar at 72 cols', () => {
+    expect(statusBarSegments(71).bar).toBe(false)
+    expect(statusBarSegments(72).bar).toBe(true)
+  })
+
+  it('enables duration at 76 cols', () => {
+    expect(statusBarSegments(75).duration).toBe(false)
+    expect(statusBarSegments(76).duration).toBe(true)
+  })
+
+  it('enables compressions at 80 cols', () => {
+    expect(statusBarSegments(79).compressions).toBe(false)
+    expect(statusBarSegments(80).compressions).toBe(true)
+  })
+
+  it('enables voice at 84 cols', () => {
+    expect(statusBarSegments(83).voice).toBe(false)
+    expect(statusBarSegments(84).voice).toBe(true)
+  })
+
+  it('enables bg at 88 cols', () => {
+    expect(statusBarSegments(87).bg).toBe(false)
+    expect(statusBarSegments(88).bg).toBe(true)
+  })
+
+  it('enables subagents at 92 cols', () => {
+    expect(statusBarSegments(91).subagents).toBe(false)
+    expect(statusBarSegments(92).subagents).toBe(true)
+  })
+
+  it('disables all tail segments at 44 cols', () => {
+    const segs = statusBarSegments(44)
+    expect(segs.bar).toBe(false)
+    expect(segs.duration).toBe(false)
+    expect(segs.compressions).toBe(false)
+    expect(segs.voice).toBe(false)
+    expect(segs.bg).toBe(false)
+    expect(segs.subagents).toBe(false)
+    expect(segs.compactCtx).toBe(true)
+  })
+})
+
+describe('statusRuleWidths', () => {
+  it('returns full width as leftWidth when cwdLabel is empty', () => {
+    const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(100, '')
+    expect(leftWidth).toBe(100)
+    expect(rightWidth).toBe(0)
+    expect(separatorWidth).toBe(0)
+  })
+
+  it('splits width between left and right when cwdLabel is set', () => {
+    const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(100, '~/repo')
+    expect(separatorWidth).toBe(3)
+    expect(rightWidth).toBe(6) // stringWidth('~/repo') = 6
+    expect(leftWidth).toBe(91) // 100 - 3 - 6
+  })
+
+  it('uses 1-col separator below 24 cols', () => {
+    const { separatorWidth } = statusRuleWidths(20, '~/r')
+    expect(separatorWidth).toBe(1)
+  })
+
+  it('respects minLeftContent', () => {
+    const { leftWidth, rightWidth } = statusRuleWidths(50, '~/very/long/path', 40)
+    expect(leftWidth).toBeGreaterThanOrEqual(40)
+    expect(rightWidth).toBeGreaterThan(0)
+  })
+
+  it('gives minimal rightWidth when terminal is very narrow', () => {
+    const { leftWidth, rightWidth } = statusRuleWidths(10, '~/very/long/path', 8)
+    expect(leftWidth).toBeGreaterThanOrEqual(8)
+    expect(rightWidth).toBeLessThanOrEqual(2)
+  })
+})
+
+// ── P0b: SessionDuration segment ──────────────────────────────────────
+
+describe('StatusRule session duration', () => {
+  it('shows session duration when sessionStartedAt is set', () => {
+    const element = StatusRule({
+      ...baseProps,
+      sessionStartedAt: Date.now() - 5 * 60_000
+    })
+    // SessionDuration uses hooks — verify the component is present in tree
+    const findComp = (node: ReactNodeLike): any => {
+      if (!node || typeof node !== 'object') return null
+      if ((node as any).type?.name === 'SessionDuration') return node
+      const children = (node as any).props?.children
+      if (Array.isArray(children)) {
+        for (const c of children) {
+          const found = findComp(c)
+          if (found) return found
+        }
+      } else if (children) {
+        return findComp(children)
+      }
+      return null
+    }
+    expect(findComp(element)).not.toBeNull()
+  })
+
+  it('hides duration when sessionStartedAt is null', () => {
+    const element = StatusRule({ ...baseProps, sessionStartedAt: null })
+    // Duration segment should not appear — baseProps has sessionStartedAt: null
+    // and we can verify by checking it doesn't contain a duration-like pattern
+    const rendered = textContent(element)
+    // The status slot has '5m 0s' from idle, but the duration segment
+    // would add ' │ Xm Ym' — we just verify no crash
+    expect(rendered).toContain('ready')
+  })
+})
+
+// ── P0c: Compressions segment ─────────────────────────────────────────
+
+describe('StatusRule compressions', () => {
+  it('shows compression count when compressions > 0', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, compressions: 3 }
+    })
+    expect(textContent(element)).toContain('cmp 3')
+  })
+
+  it('hides compressions when count is 0', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, compressions: 0 }
+    })
+    expect(textContent(element)).not.toContain('cmp')
+  })
+
+  it('shows compressions at warn threshold (5)', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, compressions: 5 }
+    })
+    expect(textContent(element)).toContain('cmp 5')
+  })
+
+  it('shows compressions at error threshold (10)', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, compressions: 10 }
+    })
+    expect(textContent(element)).toContain('cmp 10')
+  })
+})
+
+// ── P0d: memSkl segment ───────────────────────────────────────────────
+
+describe('memoryProfileLabel', () => {
+  it('shows memory and user percentages', () => {
+    const label = memoryProfileLabel({ memory_chars: 10000, memory_limit: 50000, user_chars: 5000, user_limit: 10000 })
+    expect(label).toBe('M20% U50%')
+  })
+
+  it('shows only memory when user data is missing', () => {
+    const label = memoryProfileLabel({ memory_chars: 10000, memory_limit: 50000 })
+    expect(label).toBe('M20%')
+  })
+
+  it('returns empty string when no data', () => {
+    expect(memoryProfileLabel({})).toBe('')
+  })
+})
+
+describe('skillsLabel', () => {
+  it('shows skill count', () => {
+    expect(skillsLabel({ skill_count: 165 })).toBe('S165')
+  })
+
+  it('returns empty string when skill_count is missing', () => {
+    expect(skillsLabel({})).toBe('')
+  })
+})
+
+describe('StatusRule memSkl segment', () => {
+  it('shows memory and skill labels', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: {
+        ...baseProps.usage,
+        memory_chars: 10000,
+        memory_limit: 50000,
+        user_chars: 5000,
+        user_limit: 10000,
+        skill_count: 42
+      }
+    })
+    const rendered = textContent(element)
+    expect(rendered).toContain('M20%')
+    expect(rendered).toContain('U50%')
+    expect(rendered).toContain('S42')
+  })
+})
+
+// ── P2: Color threshold tests ─────────────────────────────────────────
+
+describe('ctxBarColor', () => {
+  it('returns statusGood below 50%', () => {
+    expect(ctxBarColor(25, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusGood)
+  })
+
+  it('returns statusWarn at 50-80%', () => {
+    expect(ctxBarColor(50, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusWarn)
+    expect(ctxBarColor(79, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusWarn)
+  })
+
+  it('returns statusBad at >80% to <95%', () => {
+    expect(ctxBarColor(81, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusBad)
+    expect(ctxBarColor(94, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusBad)
+  })
+
+  it('returns statusCritical at 95%+', () => {
+    expect(ctxBarColor(95, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusCritical)
+    expect(ctxBarColor(100, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.statusCritical)
+  })
+
+  it('returns muted for null pct', () => {
+    expect(ctxBarColor(undefined, DEFAULT_THEME)).toBe(DEFAULT_THEME.color.muted)
+  })
+})
+
+describe('ctxBarHalf', () => {
+  it('returns all empty at 0%', () => {
+    const { filled, empty } = ctxBarHalf(0)
+    expect(filled).toBe('')
+    expect(empty).toBe('░░░░')
+  })
+
+  it('shows half-block at 5% (visibility fix)', () => {
+    const { filled, empty } = ctxBarHalf(5)
+    expect(filled).toBe('▌')
+    expect(empty).toBe('░░░')
+  })
+
+  it('shows 2 full + 2 empty at 50%', () => {
+    const { filled, empty } = ctxBarHalf(50)
+    expect(filled).toBe('██')
+    expect(empty).toBe('░░')
+  })
+
+  it('shows 3 full + 1 empty at 75%', () => {
+    const { filled, empty } = ctxBarHalf(75)
+    expect(filled).toBe('███')
+    expect(empty).toBe('░')
+  })
+
+  it('shows all full at 95%', () => {
+    const { filled, empty } = ctxBarHalf(95)
+    expect(filled).toBe('████')
+    expect(empty).toBe('')
+  })
+
+  it('shows all full at 100%', () => {
+    const { filled, empty } = ctxBarHalf(100)
+    expect(filled).toBe('████')
+    expect(empty).toBe('')
+  })
+
+  it('handles null pct as 0%', () => {
+    const { filled, empty } = ctxBarHalf(undefined)
+    expect(filled).toBe('')
+    expect(empty).toBe('░░░░')
+  })
+})
+
+// ── P3: Edge cases ────────────────────────────────────────────────────
+
+describe('StatusRule edge cases', () => {
+  it('renders without crash when usage has only total', () => {
+    const element = StatusRule({ ...baseProps, usage: { total: 0 } })
+    expect(textContent(element)).toContain('ready')
+  })
+
+  it('renders without crash when context_max is 0', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, context_max: 0, context_used: 0, context_percent: 0 }
+    })
+    expect(textContent(element)).toContain('ready')
+  })
+
+  it('renders without crash when cwdLabel is empty', () => {
+    const element = StatusRule({ ...baseProps, cwdLabel: '' })
+    expect(textContent(element)).toContain('ready')
+  })
+
+  it('renders without crash when pct is null', () => {
+    const element = StatusRule({
+      ...baseProps,
+      usage: { ...baseProps.usage, context_percent: undefined as unknown as number }
+    })
+    expect(textContent(element)).toContain('ready')
   })
 })

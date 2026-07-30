@@ -163,7 +163,7 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   )
 }
 
-function ctxBarColor(pct: number | undefined, t: Theme) {
+export function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {
     return t.color.muted
   }
@@ -210,7 +210,7 @@ function noticeColor(level: Notice['level'], t: Theme): string {
 // 4-char bar with half-block resolution (8 levels). Uses ▌ (left half block)
 // for fractional fills, giving 2× the granularity of a full-block bar at the
 // same width. Returns { filled, empty } so the caller can split-color them.
-function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
+export function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
   const p = Math.max(0, Math.min(100, pct ?? 0))
   const steps = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w * 2))
   const full = Math.floor(steps / 2)
