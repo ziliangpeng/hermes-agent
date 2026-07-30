@@ -218,6 +218,37 @@ describe('StatusRule voice label', () => {
   })
 })
 
+describe('StatusRule context progress bar', () => {
+  it('renders bar and percentage when context_max is set', () => {
+    const element = StatusRule({ ...baseProps, usage: { ...baseProps.usage, context_percent: 50 } })
+    const rendered = textContent(element)
+    expect(rendered).toContain('█')
+    expect(rendered).toContain('░')
+    expect(rendered).toContain('50%')
+  })
+
+  it('shows at least one filled cell at 5% (visibility fix)', () => {
+    const element = StatusRule({ ...baseProps, usage: { ...baseProps.usage, context_percent: 5 } })
+    const rendered = textContent(element)
+    expect(rendered).toContain('▌')
+    expect(rendered).toContain('5%')
+  })
+
+  it('shows full bar at 95%', () => {
+    const element = StatusRule({ ...baseProps, usage: { ...baseProps.usage, context_percent: 95 } })
+    const rendered = textContent(element)
+    expect(rendered).toContain('████')
+    expect(rendered).toContain('95%')
+  })
+
+  it('omits bar in compact context mode', () => {
+    const element = StatusRule({ ...baseProps, cols: 60 })
+    const rendered = textContent(element)
+    expect(rendered).not.toContain('█')
+    expect(rendered).not.toContain('░')
+  })
+})
+
 describe('StatusRule session count click target', () => {
   it('makes the live session count itself clickable', () => {
     const openSwitcher = vi.fn()
