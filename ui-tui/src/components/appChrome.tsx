@@ -209,9 +209,22 @@ function noticeColor(level: Notice['level'], t: Theme): string {
 
 function ctxBar(pct: number | undefined, w = 10) {
   const p = Math.max(0, Math.min(100, pct ?? 0))
-  const filled = Math.round((p / 100) * w)
+  const filled = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w))
 
   return '█'.repeat(filled) + '░'.repeat(w - filled)
+}
+
+// 4-char bar with half-block resolution (8 levels). Uses ▌ (left half block)
+// for fractional fills, giving 2× the granularity of a full-block bar at the
+// same width. Returns { filled, empty } so the caller can split-color them.
+function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
+  const p = Math.max(0, Math.min(100, pct ?? 0))
+  const steps = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w * 2))
+  const full = Math.floor(steps / 2)
+  const half = steps % 2
+  const filled = '█'.repeat(full) + (half ? '▌' : '')
+  const empty = '░'.repeat(w - full - half)
+  return { filled, empty }
 }
 
 // `minLeftContent` is the display width of the high-priority left segments
@@ -495,7 +508,7 @@ export function StatusRule({
       ? `${fmtK(usage.total)} tok`
       : ''
 
-  const bar = !segs.compactCtx && usage.context_max ? ctxBar(pct) : ''
+  const ctxBarParts = !segs.compactCtx && usage.context_max ? ctxBarHalf(pct, 4) : null
   const modelText = modelLabel(model, modelReasoningEffort, modelFast)
 
   // Subagent indicator is pinned (always visible when subagents are running),
@@ -532,12 +545,18 @@ export function StatusRule({
       ? noticeReserve
       : stringWidth('🔥 ' + status) + (lastTurnEndedAt != null ? 1 + MAX_DURATION_WIDTH : 0)
 
+  // Context segment width: token count + bar (4 chars + space) + percentage
+  const ctxSegmentWidth = ctxLabel
+    ? stringWidth(' │ ') + stringWidth(ctxLabel) +
+      (ctxBarParts ? 1 + 4 + 1 + (pct != null ? stringWidth(`${pct}%`) + 1 : 0) : 0)
+    : 0
+
   const essentialWidth =
     slotWidth +
     subagentWidth +
     stringWidth(' │ ') +
     stringWidth(modelText) +
-    (ctxLabel ? stringWidth(' │ ') + stringWidth(ctxLabel) : 0)
+    ctxSegmentWidth
 
   const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(cols, cwdLabel, essentialWidth)
 
@@ -650,9 +669,15 @@ export function StatusRule({
             {modelText}
           </Text>
           {ctxLabel ? (
-            <Text color={barColor} wrap="truncate-end">
-              {' │ '}
-              {ctxLabel}
+            <Text wrap="truncate-end">
+              <Text color={barColor}>{' │ '}{ctxLabel}</Text>
+              {ctxBarParts ? (
+                <>
+                  <Text color={barColor}>{' '}{ctxBarParts.filled}</Text>
+                  <Text color={t.color.muted}>{ctxBarParts.empty}</Text>
+                  <Text color={barColor}>{' '}{pct != null ? `${pct}%` : ''}</Text>
+                </>
+              ) : null}
             </Text>
           ) : null}
         </Box>
