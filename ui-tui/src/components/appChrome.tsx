@@ -207,13 +207,6 @@ function noticeColor(level: Notice['level'], t: Theme): string {
   return t.color.accent
 }
 
-function ctxBar(pct: number | undefined, w = 10) {
-  const p = Math.max(0, Math.min(100, pct ?? 0))
-  const filled = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w))
-
-  return '█'.repeat(filled) + '░'.repeat(w - filled)
-}
-
 // 4-char bar with half-block resolution (8 levels). Uses ▌ (left half block)
 // for fractional fills, giving 2× the granularity of a full-block bar at the
 // same width. Returns { filled, empty } so the caller can split-color them.
@@ -545,10 +538,10 @@ export function StatusRule({
       ? noticeReserve
       : stringWidth('🔥 ' + status) + (lastTurnEndedAt != null ? 1 + MAX_DURATION_WIDTH : 0)
 
-  // Context segment width: token count + bar (4 chars + space) + percentage
+  // Context segment width: SEP + token count + ' ' + bar(4) + ' ' + pct%
   const ctxSegmentWidth = ctxLabel
     ? stringWidth(' │ ') + stringWidth(ctxLabel) +
-      (ctxBarParts ? 1 + 4 + 1 + (pct != null ? stringWidth(`${pct}%`) + 1 : 0) : 0)
+      (ctxBarParts ? 1 + 4 + 1 + (pct != null ? stringWidth(`${pct}%`) : 0) : 0)
     : 0
 
   const essentialWidth =
