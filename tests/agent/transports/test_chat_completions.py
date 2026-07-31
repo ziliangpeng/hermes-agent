@@ -580,3 +580,181 @@ class TestChatCompletionsGeminiNativeExtraBodyStrip:
         eb = kw.get("extra_body")
         assert eb and "tags" in eb
 
+
+class TestChatCompletionsToolChoice:
+    """Tests for tool_choice behavior in build_kwargs — both legacy and
+    profile paths.
+
+    Covers:
+    - tool_choice=auto is set when tools are present
+    - tool_choice is NOT set when no tools present (Issue A fix)
+    - tool_choice=required when stall continuation detected
+    - request_overrides can still override tool_choice
+    """
+
+    def _tools(self):
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "terminal",
+                    "description": "Run a command",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"command": {"type": "string"}},
+                    },
+                },
+            }
+        ]
+
+    def _stall_messages(self):
+        from agent.action_stall import build_action_stall_continuation
+        return [
+            {"role": "user", "content": "Inspect the repo."},
+            {"role": "assistant", "content": "I'll inspect the repo now."},
+            {"role": "user", "content": build_action_stall_continuation()},
+        ]
+
+    def _plain_messages(self):
+        return [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello!"},
+        ]
+
+    # ── Legacy path (no provider_profile) ───────────────────────────
+
+    def test_tool_choice_auto_when_tools_present_legacy(self, transport):
+        """tool_choice=auto is set when tools are present (legacy path)."""
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=self._tools(),
+        )
+        assert kw["tool_choice"] == "auto"
+
+    def test_no_tool_choice_when_no_tools_legacy(self, transport):
+        """tool_choice is NOT set when no tools present (Issue A fix).
+
+        Without the fix, tool_choice=auto is unconditionally set even when
+        no tools are provided, which causes some providers (e.g. vLLM
+        without tools configured) to reject the request.
+        """
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=None,
+        )
+        assert "tool_choice" not in kw
+
+    def test_no_tool_choice_when_empty_tools_legacy(self, transport):
+        """tool_choice is NOT set when tools list is empty (Issue A fix)."""
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=[],
+        )
+        assert "tool_choice" not in kw
+
+    def test_tool_choice_required_on_stall_legacy(self, transport):
+        """tool_choice=required when stall continuation detected (legacy path)."""
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._stall_messages(),
+            tools=self._tools(),
+        )
+        assert kw["tool_choice"] == "required"
+
+    def test_request_overrides_override_tool_choice_legacy(self, transport):
+        """request_overrides can still override tool_choice (legacy path).
+
+        The stall continuation forces tool_choice=required, but
+        request_overrides is applied last and must win.
+        """
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._stall_messages(),
+            tools=self._tools(),
+            request_overrides={"tool_choice": "auto"},
+        )
+        assert kw["tool_choice"] == "auto"
+
+    def test_request_overrides_override_auto_legacy(self, transport):
+        """request_overrides can override the default tool_choice=auto
+        when tools are present (legacy path)."""
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=self._tools(),
+            request_overrides={"tool_choice": "none"},
+        )
+        assert kw["tool_choice"] == "none"
+
+    # ── Profile path (with provider_profile) ────────────────────────
+
+    def test_tool_choice_auto_when_tools_present_profile(self, transport):
+        """tool_choice=auto is set when tools are present (profile path)."""
+        from providers import get_provider_profile
+        profile = get_provider_profile("nous")
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=self._tools(),
+            provider_profile=profile,
+        )
+        assert kw["tool_choice"] == "auto"
+
+    def test_no_tool_choice_when_no_tools_profile(self, transport):
+        """tool_choice is NOT set when no tools present (profile path,
+        Issue A fix)."""
+        from providers import get_provider_profile
+        profile = get_provider_profile("nous")
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=None,
+            provider_profile=profile,
+        )
+        assert "tool_choice" not in kw
+
+    def test_no_tool_choice_when_empty_tools_profile(self, transport):
+        """tool_choice is NOT set when tools list is empty (profile path,
+        Issue A fix)."""
+        from providers import get_provider_profile
+        profile = get_provider_profile("nous")
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._plain_messages(),
+            tools=[],
+            provider_profile=profile,
+        )
+        assert "tool_choice" not in kw
+
+    def test_tool_choice_required_on_stall_profile(self, transport):
+        """tool_choice=required when stall continuation detected (profile path)."""
+        from providers import get_provider_profile
+        profile = get_provider_profile("nous")
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._stall_messages(),
+            tools=self._tools(),
+            provider_profile=profile,
+        )
+        assert kw["tool_choice"] == "required"
+
+    def test_request_overrides_override_tool_choice_profile(self, transport):
+        """request_overrides can still override tool_choice (profile path).
+
+        The stall continuation forces tool_choice=required, but
+        request_overrides is applied last and must win.
+        """
+        from providers import get_provider_profile
+        profile = get_provider_profile("nous")
+        kw = transport.build_kwargs(
+            model="gpt-4o",
+            messages=self._stall_messages(),
+            tools=self._tools(),
+            provider_profile=profile,
+            request_overrides={"tool_choice": "auto"},
+        )
+        assert kw["tool_choice"] == "auto"
+
