@@ -385,6 +385,7 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   "glm52 a2": "G52a2",
   "glm 52 fp8 mi350": "G52a4",
   "glm 52 fp8 mi325": "G52a2",
+  "ziliang kimi k3 speedrun": "K3",
   // Anthropic
   "fable 5": "f5",
   "claude-fable-5": "f5",

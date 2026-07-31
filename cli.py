@@ -4565,6 +4565,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
             "glm52 a2": "G52a2",
             "glm 52 fp8 mi350": "G52a4",
             "glm 52 fp8 mi325": "G52a2",
+            "ziliang kimi k3 speedrun": "K3",
             "claude-fable-5": "f5", "fable 5": "f5",
             "claude-opus-5": "O5", "claude opus 5": "O5",
             "claude-sonnet-5": "S5", "claude sonnet 5": "S5",
