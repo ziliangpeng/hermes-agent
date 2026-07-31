@@ -248,6 +248,11 @@ _EPHEMERAL_SCAFFOLDING_FLAGS = (
     # drive the bounded retry. Persisting them would replay the internal
     # retry instruction as user-authored context on resume.
     "_dropped_toolcall_nudge",
+    # action-stall continuation: when the model narrates intent but emits
+    # no tool calls, the loop appends an interim assistant turn + corrective
+    # user nudge to force one retry with tool_choice=required. These exist
+    # only for that retry and must not persist.
+    "_action_stall_continuation",
 )
 
 
