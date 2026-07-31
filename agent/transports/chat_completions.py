@@ -373,6 +373,29 @@ class ChatCompletionsTransport(ProviderTransport):
                 tools = sanitize_moonshot_tools(tools)
             api_kwargs["tools"] = tools
 
+            # tool_choice: default to "auto" when tools are present. Without this,
+            # vLLM backends without a Jinja chat template (e.g. Kimi K3) don't apply
+            # structural tag constraints, causing tool-calling failure. (#39099)
+            # Gated on ``if tools`` so requests without tools don't send
+            # tool_choice=auto — some providers (vLLM without tools configured)
+            # reject the request. (Issue A, PR #34)
+            api_kwargs.setdefault("tool_choice", "auto")
+
+        # Action-stall retry: if the conversation loop injected a corrective
+        # continuation (model narrated intent but emitted no tool calls), force
+        # tool_choice="required" and override reasoning_effort=low for this
+        # single retry. reasoning_effort=none breaks K3 structural tag emission,
+        # so we force a non-none value only on the stall retry.
+        try:
+            from agent.action_stall import latest_user_message_is_stall_continuation
+            if latest_user_message_is_stall_continuation(sanitized):
+                api_kwargs["tool_choice"] = "required"
+                _existing_effort = api_kwargs.get("reasoning_effort", "")
+                if _existing_effort not in ("low", "medium", "high"):
+                    api_kwargs["reasoning_effort"] = "low"
+        except Exception:
+            pass
+
         # max_tokens resolution — priority: ephemeral > user > provider default
         max_tokens_fn = params.get("max_tokens_param_fn")
         ephemeral = params.get("ephemeral_max_output_tokens")
@@ -581,6 +604,29 @@ class ChatCompletionsTransport(ProviderTransport):
             if is_moonshot_model(model):
                 tools = sanitize_moonshot_tools(tools)
             api_kwargs["tools"] = tools
+
+            # tool_choice: default to "auto" when tools are present. Without this,
+            # vLLM backends without a Jinja chat template (e.g. Kimi K3) don't apply
+            # structural tag constraints, causing tool-calling failure. (#39099)
+            # Gated on ``if tools`` so requests without tools don't send
+            # tool_choice=auto — some providers (vLLM without tools configured)
+            # reject the request. (Issue A, PR #34)
+            api_kwargs.setdefault("tool_choice", "auto")
+
+        # Action-stall retry: if the conversation loop injected a corrective
+        # continuation (model narrated intent but emitted no tool calls), force
+        # tool_choice="required" and override reasoning_effort=low for this
+        # single retry. reasoning_effort=none breaks K3 structural tag emission,
+        # so we force a non-none value only on the stall retry.
+        try:
+            from agent.action_stall import latest_user_message_is_stall_continuation
+            if latest_user_message_is_stall_continuation(sanitized):
+                api_kwargs["tool_choice"] = "required"
+                _existing_effort = api_kwargs.get("reasoning_effort", "")
+                if _existing_effort not in ("low", "medium", "high"):
+                    api_kwargs["reasoning_effort"] = "low"
+        except Exception:
+            pass
 
         # max_tokens resolution — priority: ephemeral > user > profile default
         max_tokens_fn = params.get("max_tokens_param_fn")

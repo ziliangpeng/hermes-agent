@@ -6636,15 +6636,18 @@ def run_conversation(
                 ):
                     codex_ack_continuations += 1
                     interim_msg = agent._build_assistant_message(assistant_message, "incomplete")
+                    # Mark as ephemeral action-stall continuation so the pop-loop
+                    # and persistence layer strip it before the next API call / resume.
+                    interim_msg["_action_stall_continuation"] = True
                     messages.append(interim_msg)
                     agent._emit_interim_assistant_message(interim_msg)
 
+                    from agent.action_stall import build_action_stall_continuation
                     continue_msg = {
                         "role": "user",
-                        "content": (
-                            "[System: Continue now. Execute the required tool calls and only "
-                            "send your final answer after completing the task.]"
-                        ),
+                        "content": build_action_stall_continuation(),
+                        # Ephemeral: drives the single stall-retry turn only.
+                        "_action_stall_continuation": True,
                     }
                     messages.append(continue_msg)
                     agent._session_messages = messages
@@ -6736,6 +6739,7 @@ def run_conversation(
                         or messages[-1].get("_empty_recovery_synthetic")
                         or messages[-1].get("_empty_terminal_sentinel")
                         or messages[-1].get("_dropped_toolcall_nudge")
+                        or messages[-1].get("_action_stall_continuation")
                     )
                 ):
                     messages.pop()
