@@ -163,7 +163,7 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   )
 }
 
-function ctxBarColor(pct: number | undefined, t: Theme) {
+export function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {
     return t.color.muted
   }
@@ -210,7 +210,7 @@ function noticeColor(level: Notice['level'], t: Theme): string {
 // 4-char bar with half-block resolution (8 levels). Uses ▌ (left half block)
 // for fractional fills, giving 2× the granularity of a full-block bar at the
 // same width. Returns { filled, empty } so the caller can split-color them.
-function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
+export function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
   const p = Math.max(0, Math.min(100, pct ?? 0))
   const steps = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w * 2))
   const full = Math.floor(steps / 2)
@@ -589,7 +589,6 @@ export function StatusRule({
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
-  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
   const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
@@ -601,9 +600,12 @@ export function StatusRule({
   const resumeHintText = '↩'
 
   const showResumeHint = !busy && subagentCount > 0 && fits(SEP + stringWidth(resumeHintText))
-  // Dev-gated readout (HERMES_DEV_CREDITS), lowest priority,
-  // so it consumes tail budget LAST and drops first on a narrow terminal.
+  // Dev-gated readout (HERMES_DEV_CREDITS), low priority.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
+
+  // memSkl is the most peripheral tail segment — evaluate last so it drops
+  // first on narrow terminals, matching its render position (dead last).
+  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
 
   const handleSessionCountClick = (event: { stopImmediatePropagation?: () => void }) => {
     event.stopImmediatePropagation?.()
