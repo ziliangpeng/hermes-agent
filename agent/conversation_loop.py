@@ -8350,9 +8350,10 @@ def run_conversation(
                     append_message(messages, interim_msg)
                     agent._emit_interim_assistant_message(interim_msg)
 
+                    from agent.action_stall import build_action_stall_continuation
                     continue_msg = {
                         "role": "user",
-                        "content": _CODEX_ACK_CONTINUATION_NUDGE,
+                        "content": build_action_stall_continuation(),
                     }
                     append_message(messages, continue_msg)
                     agent._session_messages = messages
