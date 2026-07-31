@@ -55,7 +55,7 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
     return {
       frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? '⚕ ',
       intervalMs: SPINNER_TICK_MS * 6,
-      showVerb: true
+      showVerb: false
     }
   }
 
@@ -97,11 +97,12 @@ const indicatorFrameWidth = (style: IndicatorStyle): number => {
 
 // Bounded width of the elapsed-time clock, derived from `fmtDuration` itself so
 // the reservation/budget stays consistent with what actually renders (it emits
-// a space between units, e.g. `59m 59s` / `99h 59m`). Durations beyond this
-// (100h+) are left to clip rather than reserving unbounded width.
+// a space between units, e.g. `59m 59s` / `23h 59m` / `999d 23h`). Durations
+// beyond this are left to clip rather than reserving unbounded width.
 export const MAX_DURATION_WIDTH = Math.max(
-  stringWidth(fmtDuration(59 * 60_000 + 59_000)), // "59m 59s"
-  stringWidth(fmtDuration(99 * 3_600_000 + 59 * 60_000)) // "99h 59m"
+  stringWidth(fmtDuration(59 * 60_000 + 59_000)), // "59m 59s" (max m+s)
+  stringWidth(fmtDuration(23 * 3_600_000 + 59 * 60_000)), // "23h 59m" (max h+m)
+  stringWidth(fmtDuration(999 * 86_400_000 + 23 * 3_600_000)) // "999d 23h" (max d+h)
 )
 
 // Display width to reserve for the busy indicator so its verb + elapsed-time
@@ -112,8 +113,8 @@ export const MAX_DURATION_WIDTH = Math.max(
 export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
   const { showVerb } = renderIndicator(style, 0)
   const verb = showVerb ? 1 + VERB_PAD_LEN : 0
-  // ` · ` plus the bounded clock (e.g. `59m 59s`).
-  const duration = hasDuration ? stringWidth(' · ') + MAX_DURATION_WIDTH : 0
+  // ` ` plus the bounded clock (e.g. `59m 59s`).
+  const duration = hasDuration ? stringWidth(' ') + MAX_DURATION_WIDTH : 0
 
   return indicatorFrameWidth(style) + verb + duration
 }
@@ -153,7 +154,7 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
   // IS shown, its trailing padding already provides the gap, so the extra
   // space is harmless.
-  const durationSegment = startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''
+  const durationSegment = startedAt ? ` ${fmtDuration(now - startedAt)}` : ''
 
   return (
     <Text color={color}>
@@ -164,7 +165,7 @@ function FaceTicker({ color, startedAt, style }: { color: string; startedAt?: nu
   )
 }
 
-function ctxBarColor(pct: number | undefined, t: Theme) {
+export function ctxBarColor(pct: number | undefined, t: Theme) {
   if (pct == null) {
     return t.color.muted
   }
@@ -236,11 +237,17 @@ function noticeColor(level: Notice['level'], t: Theme): string {
   return t.color.accent
 }
 
-function ctxBar(pct: number | undefined, w = 10) {
+// 4-char bar with half-block resolution (8 levels). Uses ▌ (left half block)
+// for fractional fills, giving 2× the granularity of a full-block bar at the
+// same width. Returns { filled, empty } so the caller can split-color them.
+export function ctxBarHalf(pct: number | undefined, w = 4): { filled: string; empty: string } {
   const p = Math.max(0, Math.min(100, pct ?? 0))
-  const filled = Math.round((p / 100) * w)
-
-  return '█'.repeat(filled) + '░'.repeat(w - filled)
+  const steps = Math.max(p > 0 ? 1 : 0, Math.round((p / 100) * w * 2))
+  const full = Math.floor(steps / 2)
+  const half = steps % 2
+  const filled = '█'.repeat(full) + (half ? '▌' : '')
+  const empty = '░'.repeat(w - full - half)
+  return { filled, empty }
 }
 
 // `minLeftContent` is the display width of the high-priority left segments
@@ -383,7 +390,10 @@ function IdleSince({ endedAt }: { endedAt: number }) {
     return () => clearInterval(id)
   }, [endedAt])
 
-  return `✓ ${fmtDuration(now - endedAt)}`
+  // Leading space separates the duration from the status text (e.g.
+  // `🔥 ready 5m`). The `✓` glyph is dropped — the idle clock now lives
+  // inside the status slot, not as a standalone tail segment.
+  return ` ${fmtDuration(now - endedAt)}`
 }
 
 const effortLabel = (effort?: string) => {
@@ -394,8 +404,45 @@ const effortLabel = (effort?: string) => {
   return value && value !== 'medium' && value !== 'normal' && value !== 'default' ? value : ''
 }
 
-const shortModelLabel = (model: string) =>
-  model
+// ── Model-name display overrides ────────────────────────────────────
+// Narrow display names for the status bar.  Matched after stripping
+// the provider prefix and normalising separator characters.
+const _MODEL_SHORT_NAMES: Record<string, string> = {
+  // DeepSeek V4 family
+  "dsv4 flash": "V4F",
+  "dsv4-flash": "V4F",
+  "dsv4 flash h100 vllm": "V4F",
+  "dsv4 flash h100 sglang": "V4F",
+  "dsv4 vllm": "V4",
+  "dsv4-pro": "V4P",
+  "dsv4 pro": "V4P",
+  "dsv4 pro h100 vllm": "V4P",
+  // GLM-5.2 (gcp5 warhol / amd4 base)
+  "warhol glm 52 fp8": "G52",
+  "glm 52 fp8 base": "G52a",
+  "glm52": "G52",
+  "glm52 a4": "G52a4",
+  "glm52 a2": "G52a2",
+  "glm 52 fp8 mi350": "G52a4",
+  "glm 52 fp8 mi325": "G52a2",
+  "ziliang kimi k3 speedrun": "K3",
+  // Anthropic
+  "fable 5": "f5",
+  "claude-fable-5": "f5",
+  "claude opus 5": "O5",
+  "claude sonnet 5": "S5",
+  "opus 4 8": "o4.8",
+  "opus 4.8": "o4.8",
+  "opus 4 7": "o4.7",
+  "opus 4.7": "o4.7",
+  "sonnet 4 6": "s4.6",
+  "sonnet 4.6": "s4.6",
+  "haiku 4 5": "h4.5",
+  "haiku 4.5": "h4.5",
+}
+
+const shortModelLabel = (model: string) => {
+  const short = model
     .split('/')
     .pop()!
     .replace(/^claude[-_]/, '')
@@ -403,9 +450,27 @@ const shortModelLabel = (model: string) =>
     .replace(/[-_]/g, ' ')
     .replace(/\b(\d+)\s+(\d+)\b/g, '$1.$2')
     .trim()
+    .toLowerCase()
+  return _MODEL_SHORT_NAMES[short] ?? short
+}
 
 const modelLabel = (model: string, effort?: string, fast?: boolean) =>
   [shortModelLabel(model), effortLabel(effort), fast ? 'fast' : ''].filter(Boolean).join(' ')
+
+const hasNumber = (v: unknown): v is number => typeof v === 'number'
+
+export const memoryProfileLabel = (usage: Usage) => {
+  const parts: string[] = []
+  if (hasNumber(usage.memory_chars) && hasNumber(usage.memory_limit)) {
+    parts.push(`M${Math.round((usage.memory_chars / usage.memory_limit) * 100)}%`)
+  }
+  if (hasNumber(usage.user_chars) && hasNumber(usage.user_limit)) {
+    parts.push(`U${Math.round((usage.user_chars / usage.user_limit) * 100)}%`)
+  }
+  return parts.join(' ')
+}
+
+export const skillsLabel = (usage: Usage) => (hasNumber(usage.skill_count) ? `S${usage.skill_count}` : '')
 
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
@@ -469,8 +534,19 @@ export function StatusRule({
       ? `${fmtK(usage.total)} tok`
       : ''
 
-  const bar = !segs.compactCtx && usage.context_max ? ctxBar(pct) : ''
+  const ctxBarParts = !segs.compactCtx && usage.context_max ? ctxBarHalf(pct, 4) : null
   const modelText = modelLabel(model, modelReasoningEffort, modelFast)
+
+  // Subagent indicator is pinned (always visible when subagents are running),
+  // rendered before the model name so it survives on narrow terminals.
+  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
+  const completedSubagents = typeof usage.completed_subagents === 'number' ? usage.completed_subagents : 0
+  const subagentLabel = subagentCount > 0
+    ? completedSubagents > 0
+      ? `🏃${subagentCount}🏁${completedSubagents}`
+      : `🏃${subagentCount}`
+    : ''
+  const subagentWidth = subagentLabel ? stringWidth(' │ ') + stringWidth(subagentLabel) : 0
 
   // Battery read-out — the first (pinned) status-bar element when enabled.
   const showBattery = !!battery && battery.available && battery.percent != null
@@ -499,15 +575,21 @@ export function StatusRule({
     ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null)
     : showNotice
       ? noticeReserve
-      : stringWidth(status)
+      : stringWidth('🔥 ' + status) + (lastTurnEndedAt != null ? 1 + MAX_DURATION_WIDTH : 0)
+
+  // Context segment width: SEP + token count + ' ' + bar(4) + ' ' + pct%
+  const ctxSegmentWidth = ctxLabel
+    ? stringWidth(' │ ') + stringWidth(ctxLabel) +
+      (ctxBarParts ? 1 + 4 + 1 + (pct != null ? stringWidth(`${pct}%`) : 0) : 0)
+    : 0
 
   const essentialWidth =
-    stringWidth('─ ') +
     batteryWidth +
     slotWidth +
+    subagentWidth +
     stringWidth(' │ ') +
     stringWidth(modelText) +
-    (ctxLabel ? stringWidth(' │ ') + stringWidth(ctxLabel) : 0)
+    ctxSegmentWidth
 
   const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(cols, cwdLabel, essentialWidth)
 
@@ -529,7 +611,7 @@ export function StatusRule({
     return false
   }
 
-  const sessionCountText = liveSessionCount > 0 ? statusSessionCountLabel(liveSessionCount) : ''
+  const sessionCountText = liveSessionCount > 1 ? statusSessionCountLabel(liveSessionCount) : ''
   const compressions = typeof usage.compressions === 'number' ? usage.compressions : 0
 
   // Dev-only readout (HERMES_DEV_CREDITS). The server omits the key entirely unless the
@@ -540,36 +622,30 @@ export function StatusRule({
     typeof usage.dev_credits_spent_micros === 'number'
       ? `Δ ${(usage.dev_credits_spent_micros / 10000).toFixed(1)}¢`
       : ''
+  const memoryLabel = memoryProfileLabel(usage)
+  const skillsStr = skillsLabel(usage)
+  const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
 
-  const showBar = !!bar && fits(SEP + stringWidth(`[${bar}] ${pct != null ? `${pct}%` : ''}`))
   const showDuration = segs.duration && !!sessionStartedAt && fits(SEP + MAX_DURATION_WIDTH)
-
-  // Idle clock — time since the last final agent response. Hidden while busy
-  // (the FaceTicker's elapsed tail covers the live turn) and before the first
-  // turn completes. Shares the duration breakpoint and width reservation.
-  const showIdle =
-    segs.duration && !busy && lastTurnEndedAt != null && fits(SEP + stringWidth('✓ ') + MAX_DURATION_WIDTH)
 
   const showCompressions = segs.compressions && compressions > 0 && fits(SEP + stringWidth(`cmp ${compressions}`))
   const showVoice = segs.voice && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
   const showBg = segs.bg && bgCount > 0 && fits(SEP + stringWidth(`${bgCount} bg`))
-  const subagentCount = typeof usage.active_subagents === 'number' ? usage.active_subagents : 0
-  const showSubagents = segs.subagents && subagentCount > 0 && fits(SEP + stringWidth(`⛓ ${subagentCount}`))
 
   // Parked-background reassurance: a top-level delegate_task runs in the
   // background, so the turn ends (idle) while the subagent keeps working and its
-  // result re-enters as a fresh turn later. When idle with work still in flight,
-  // spell out that the agent resumes on its own — no spinner, nothing to poll.
-  // Width-budgeted like every tail segment, so it drops first on a tight
-  // terminal where ⛓ already carries the signal.
-  const resumeHintText =
-    subagentCount === 1 ? '↩ resumes when subagent finishes' : `↩ resumes when ${subagentCount} subagents finish`
+  // result re-enters as a fresh turn later. A bare ↩ arrow signals the agent
+  // will auto-resume — no spinner, nothing to poll. 🏃N carries the count.
+  const resumeHintText = '↩'
 
   const showResumeHint = !busy && subagentCount > 0 && fits(SEP + stringWidth(resumeHintText))
-  // Dev-gated readout (HERMES_DEV_CREDITS), lowest priority,
-  // so it consumes tail budget LAST and drops first on a narrow terminal.
+  // Dev-gated readout (HERMES_DEV_CREDITS), low priority.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
+
+  // memSkl is the most peripheral tail segment — evaluate last so it drops
+  // first on narrow terminals, matching its render position (dead last).
+  const showMemSkl = !!memSklLabel && fits(SEP + stringWidth(memSklLabel))
 
   // Focus-view badge. Pinned (not tail-budgeted) on purpose: the whole point of
   // the indicator is that the user can never be in reduced-output mode without
@@ -597,7 +673,6 @@ export function StatusRule({
             renders as a separate shrinkable box below so a long notice
             ellipsizes instead of crushing model │ ctx (R3-M7). */}
         <Box flexDirection="row" flexShrink={0}>
-          <Text color={t.color.border}>{'─ '}</Text>
           {showBattery ? (
             <Text color={batteryColorVal}>
               {batteryText}
@@ -608,7 +683,8 @@ export function StatusRule({
             <FaceTicker color={statusColor} startedAt={turnStartedAt} style={indicatorStyle} />
           ) : showNotice ? null : (
             <Text color={statusColor} wrap="truncate-end">
-              {status}
+              🔥 {status}
+              {lastTurnEndedAt != null ? <IdleSince endedAt={lastTurnEndedAt} /> : null}
             </Text>
           )}
         </Box>
@@ -622,8 +698,13 @@ export function StatusRule({
             </Text>
           </Box>
         ) : null}
-        {/* Pinned essentials — model + context never shrink, always visible. */}
+        {/* Pinned essentials — subagent status + model + context never shrink. */}
         <Box flexDirection="row" flexShrink={0}>
+          {subagentLabel ? (
+            <Text color={t.color.muted} wrap="truncate-end">
+              {' │ '}{subagentLabel}
+            </Text>
+          ) : null}
           {DEV_CREDITS_MODE ? (
             <Text color={t.color.warn} wrap="truncate-end">
               {' (dev credits)'}
@@ -634,9 +715,15 @@ export function StatusRule({
             {modelText}
           </Text>
           {ctxLabel ? (
-            <Text color={t.color.muted} wrap="truncate-end">
-              {' │ '}
-              {ctxLabel}
+            <Text wrap="truncate-end">
+              <Text color={barColor}>{' │ '}{ctxLabel}</Text>
+              {ctxBarParts ? (
+                <>
+                  <Text color={barColor}>{' '}{ctxBarParts.filled}</Text>
+                  <Text color={t.color.muted}>{ctxBarParts.empty}</Text>
+                  <Text color={barColor}>{' '}{pct != null ? `${pct}%` : ''}</Text>
+                </>
+              ) : null}
             </Text>
           ) : null}
         </Box>
@@ -646,22 +733,10 @@ export function StatusRule({
             <Text color={t.color.warn}>◉ focus</Text>
           </Box>
         ) : null}
-        {showBar ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}
-            <Text color={barColor}>[{bar}]</Text> <Text color={barColor}>{pct != null ? `${pct}%` : ''}</Text>
-          </Text>
-        ) : null}
         {showDuration ? (
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             <SessionDuration startedAt={sessionStartedAt!} />
-          </Text>
-        ) : null}
-        {showIdle ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}
-            <IdleSince endedAt={lastTurnEndedAt!} />
           </Text>
         ) : null}
         {showCompressions ? (
@@ -673,12 +748,7 @@ export function StatusRule({
           </Text>
         ) : null}
         {showVoice ? (
-          <Text
-            color={
-              voiceLabel!.startsWith('●') ? t.color.error : voiceLabel!.startsWith('◉') ? t.color.warn : t.color.muted
-            }
-            wrap="truncate-end"
-          >
+          <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {voiceLabel}
           </Text>
@@ -688,11 +758,6 @@ export function StatusRule({
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {bgCount} bg
-          </Text>
-        ) : null}
-        {showSubagents ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}⛓ {subagentCount}
           </Text>
         ) : null}
         {showResumeHint ? (
@@ -705,6 +770,12 @@ export function StatusRule({
           <Text color={t.color.accent} wrap="truncate-end">
             {' │ '}
             {devCreditsText}
+          </Text>
+        ) : null}
+        {showMemSkl ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}
+            {memSklLabel}
           </Text>
         ) : null}
         {/* SpawnHud isn't part of the tail budget (its width is dynamic), so it

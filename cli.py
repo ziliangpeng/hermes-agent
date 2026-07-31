@@ -115,8 +115,9 @@ def format_duration_compact(*args, **kwargs):
     if hours < 24:
         remaining_min = int(minutes % 60)
         return f"{int(hours)}h {remaining_min}m" if remaining_min else f"{int(hours)}h"
-    days = hours / 24
-    return f"{days:.1f}d"
+    days = int(hours // 24)
+    remaining_hours = int(hours % 24)
+    return f"{days}d {remaining_hours}h" if remaining_hours else f"{days}d"
 
 
 # Cached reverse map of config.yaml ``model_aliases:`` so the TUI can show
@@ -5130,6 +5131,16 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return "class:status-bar-warn"
         return "class:status-bar-dim"
 
+    def _memory_label_style(self, snapshot: Dict[str, Any]) -> str:
+        """Color memory/user label by max(memory%, user%) of their caps."""
+        max_pct = 0
+        for chars_key, limit_key in (("memory_chars", "memory_limit"), ("user_chars", "user_limit")):
+            limit = snapshot.get(limit_key) or 0
+            chars = snapshot.get(chars_key) or 0
+            if limit:
+                max_pct = max(max_pct, round((chars / limit) * 100))
+        return self._status_bar_context_style(max_pct)
+
     def _build_context_bar(self, percent_used: Optional[int], width: int = 10) -> str:
         safe_percent = max(0, min(100, percent_used or 0))
         filled = round((safe_percent / 100) * width)
@@ -5206,6 +5217,30 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             model_short = format_model_for_display(model_short)
         if model_short.endswith(".gguf"):
             model_short = model_short[:-5]
+        # Compact display name lookup (mirrors TUI _MODEL_SHORT_NAMES)
+        _short_map = {
+            "dsv4-flash-h100-vllm": "V4F", "dsv4-flash": "V4F",
+            "dsv4 flash h100 vllm": "V4F",
+            "dsv4 vllm": "V4",
+            "dsv4-pro": "V4P", "dsv4 pro": "V4P",
+            "dsv4 pro h100 vllm": "V4P",
+            "warhol glm 52 fp8": "G52",
+            "glm 52 fp8 base": "G52a",
+            "glm52": "G52",
+            "glm52 a4": "G52a4",
+            "glm52 a2": "G52a2",
+            "glm 52 fp8 mi350": "G52a4",
+            "glm 52 fp8 mi325": "G52a2",
+            "ziliang kimi k3 speedrun": "K3",
+            "claude-fable-5": "f5", "fable 5": "f5",
+            "claude-opus-5": "O5", "claude opus 5": "O5",
+            "claude-sonnet-5": "S5", "claude sonnet 5": "S5",
+            "claude-opus-4-8": "o4.8", "opus 4.8": "o4.8",
+            "claude-opus-4-7": "o4.7", "opus 4.7": "o4.7",
+            "claude-sonnet-4-6": "s4.6", "sonnet 4.6": "s4.6",
+            "claude-haiku-4-5": "h4.5", "haiku 4.5": "h4.5",
+        }
+        model_short = _short_map.get(model_short.replace("-", " ").strip().lower(), model_short)
         if len(model_short) > 26:
             model_short = f"{model_short[:23]}..."
 
@@ -5238,11 +5273,17 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             "active_background_tasks": 0,
             "active_background_processes": 0,
             "active_background_subagents": 0,
+            "completed_background_subagents": 0,
             "battery_label": "",
             "battery_category": "dim",
             # Focus view badge (/focus). Persistent indicator so the reduced
             # output mode is never invisible. Display-only.
             "focus_label": "",
+            "memory_chars": None,
+            "memory_limit": None,
+            "user_chars": None,
+            "user_limit": None,
+            "skill_count": None,
         }
 
         try:
@@ -5291,11 +5332,13 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         # Count live background/async subagents (delegate_task batches and
         # background single delegations tracked by tools.async_delegation).
-        # active_count() iterates an in-memory records dict under a lock —
-        # cheap and only counts records still in the "running" state.
+        # delegation_stats() iterates an in-memory records dict under a lock —
+        # cheap and returns running + completed counts.
         try:
-            from tools.async_delegation import active_count as _async_active_count
-            snapshot["active_background_subagents"] = _async_active_count()
+            from tools.async_delegation import delegation_stats as _delegation_stats
+            stats = _delegation_stats()
+            snapshot["active_background_subagents"] = stats["running"]
+            snapshot["completed_background_subagents"] = stats["completed"]
         except Exception:
             pass
 
@@ -5319,6 +5362,42 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
 
         if not agent:
             return snapshot
+
+        # Curated memory + user-profile usage (for status-bar MEM/USR segment)
+        try:
+            store = getattr(agent, "_memory_store", None)
+            if store is not None:
+                # Re-read disk if MEMORY.md / USER.md changed out-of-band
+                # (e.g. user/tooling edited the file directly). System prompt
+                # snapshot stays frozen — only the live state updates so the
+                # status bar reflects current disk reality.
+                if hasattr(store, "refresh_live_from_disk"):
+                    try:
+                        store.refresh_live_from_disk()
+                    except Exception:
+                        pass
+                snapshot["memory_chars"] = store._char_count("memory")
+                snapshot["memory_limit"] = store.memory_char_limit
+                snapshot["user_chars"] = store._char_count("user")
+                snapshot["user_limit"] = store.user_char_limit
+        except Exception:
+            pass
+
+        # Skill count (for status-bar SKL segment) — counts SKILL.md files
+        # across local + external skill dirs. Cheap directory walk; the
+        # prompt-builder already does this work and caches it, so this is
+        # effectively free on subsequent renders.
+        try:
+            from agent.skill_utils import get_all_skills_dirs, iter_skill_index_files
+            total = 0
+            for sdir in get_all_skills_dirs():
+                if not sdir.exists():
+                    continue
+                for _ in iter_skill_index_files(sdir, "SKILL.md"):
+                    total += 1
+            snapshot["skill_count"] = total
+        except Exception:
+            pass
 
         snapshot["session_input_tokens"] = getattr(agent, "session_input_tokens", 0) or 0
         snapshot["session_output_tokens"] = getattr(agent, "session_output_tokens", 0) or 0
@@ -5364,6 +5443,52 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             return get_cwidth(text or "")
         except Exception:
             return len(text or "")
+
+    def _build_memory_label(self, snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render compact 'M25% U13%' if memory_store is wired up."""
+        if snapshot.get("memory_limit") is None and snapshot.get("user_limit") is None:
+            return None
+        parts = []
+        if snapshot.get("memory_limit"):
+            v = snapshot.get('memory_chars', 0) or 0
+            l = snapshot['memory_limit'] or 1
+            parts.append(f"M{round((v / l) * 100)}%")
+        if snapshot.get("user_limit"):
+            v = snapshot.get('user_chars', 0) or 0
+            l = snapshot['user_limit'] or 1
+            parts.append(f"U{round((v / l) * 100)}%")
+        return " ".join(parts) if parts else None
+
+    @staticmethod
+    def _build_skills_label(snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render 'S<count>' if skill_count is available.
+
+        Counts all SKILL.md files across the local skills dir and any
+        configured external dirs. None for non-CLI callers / pre-init.
+        """
+        n = snapshot.get("skill_count")
+        if n is None:
+            return None
+        return f"S{n}"
+
+    @staticmethod
+    def _build_subagent_label(snapshot: Dict[str, Any]) -> Optional[str]:
+        """Render compact subagent stats: '🏃N' or '🏃N🏁M'.
+
+        - ``running`` (🏃): async delegations still executing.
+        - ``completed`` (🏁): recently finished delegations (retained tail).
+        Only shown when there are running subagents; completed count
+        appears alongside running to give batch progress context.
+        """
+        running = snapshot.get("active_background_subagents", 0) or 0
+        completed = snapshot.get("completed_background_subagents", 0) or 0
+        if not running:
+            return None
+        # When subagents are running, show both counts so the user can
+        # see batch progress (e.g. 3 running, 2 done → 3 of 5 dispatched).
+        if completed:
+            return f"🏃{running}🏁{completed}"
+        return f"🏃{running}"
 
     @classmethod
     def _trim_status_bar_text(cls, text: str, max_width: int) -> str:
@@ -5902,9 +6027,20 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                 bg_proc_count = snapshot.get("active_background_processes", 0)
                 if bg_proc_count:
                     parts.append(f"⚙ {bg_proc_count}")
-                bg_subagent_count = snapshot.get("active_background_subagents", 0)
-                if bg_subagent_count:
-                    parts.append(f"⛓ {bg_subagent_count}")
+                subagent_label = self._build_subagent_label(snapshot)
+                if subagent_label:
+                    parts.append(subagent_label)
+                mem_label = self._build_memory_label(snapshot)
+                if mem_label:
+                    parts.append(mem_label)
+                # Skill count is useful, but lower priority than compression/memory
+                # indicators. Only render it on genuinely wide terminals so it
+                # doesn't push the existing styled fragments into the overflow
+                # fallback (which would collapse per-segment styles).
+                if width >= 100:
+                    skl_label = self._build_skills_label(snapshot)
+                    if skl_label:
+                        parts.append(skl_label)
                 if goal_segment:
                     parts.append(goal_segment)
                 parts.append(duration_label)
@@ -5933,9 +6069,16 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             bg_proc_count = snapshot.get("active_background_processes", 0)
             if bg_proc_count:
                 parts.append(f"⚙ {bg_proc_count}")
-            bg_subagent_count = snapshot.get("active_background_subagents", 0)
-            if bg_subagent_count:
-                parts.append(f"⛓ {bg_subagent_count}")
+            subagent_label = self._build_subagent_label(snapshot)
+            if subagent_label:
+                parts.append(subagent_label)
+            mem_label = self._build_memory_label(snapshot)
+            if mem_label:
+                parts.append(mem_label)
+            if width >= 100:
+                skl_label = self._build_skills_label(snapshot)
+                if skl_label:
+                    parts.append(skl_label)
             if goal_segment:
                 parts.append(goal_segment)
             parts.append(duration_label)
@@ -5995,7 +6138,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     compressions = snapshot.get("compressions", 0)
                     bg_count = snapshot.get("active_background_tasks", 0)
                     bg_proc_count = snapshot.get("active_background_processes", 0)
-                    bg_subagent_count = snapshot.get("active_background_subagents", 0)
+                    subagent_label = self._build_subagent_label(snapshot)
                     frags = [
                         ("class:status-bar", " ⚕ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
@@ -6011,9 +6154,18 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     if bg_proc_count:
                         frags.append(("class:status-bar-dim", " · "))
                         frags.append(("class:status-bar-strong", f"⚙ {bg_proc_count}"))
-                    if bg_subagent_count:
+                    if subagent_label:
                         frags.append(("class:status-bar-dim", " · "))
-                        frags.append(("class:status-bar-strong", f"⛓ {bg_subagent_count}"))
+                        frags.append(("class:status-bar-strong", subagent_label))
+                    mem_label = self._build_memory_label(snapshot)
+                    if mem_label:
+                        frags.append(("class:status-bar-dim", " · "))
+                        frags.append((self._memory_label_style(snapshot), mem_label))
+                    if width >= 100:
+                        skl_label = self._build_skills_label(snapshot)
+                        if skl_label:
+                            frags.append(("class:status-bar-dim", " · "))
+                            frags.append(("class:status-bar-dim", skl_label))
                     if goal_segment:
                         frags.append(("class:status-bar-dim", " · "))
                         frags.append(("class:status-bar-strong", goal_segment))
@@ -6040,7 +6192,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     compressions = snapshot.get("compressions", 0)
                     bg_count = snapshot.get("active_background_tasks", 0)
                     bg_proc_count = snapshot.get("active_background_processes", 0)
-                    bg_subagent_count = snapshot.get("active_background_subagents", 0)
+                    subagent_label = self._build_subagent_label(snapshot)
                     frags = [
                         ("class:status-bar", " ⚕ "),
                         ("class:status-bar-strong", snapshot["model_short"]),
@@ -6060,9 +6212,21 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
                     if bg_proc_count:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-strong", f"⚙ {bg_proc_count}"))
-                    if bg_subagent_count:
+                    if subagent_label:
                         frags.append(("class:status-bar-dim", " │ "))
-                        frags.append(("class:status-bar-strong", f"⛓ {bg_subagent_count}"))
+                        frags.append(("class:status-bar-strong", subagent_label))
+                    mem_label = self._build_memory_label(snapshot)
+                    if mem_label:
+                        frags.append(("class:status-bar-dim", " │ "))
+                        frags.append((self._memory_label_style(snapshot), mem_label))
+                    # Skill count is lower priority; render only when wide enough
+                    # so existing styled segments (especially compression) don't
+                    # collapse into the overflow fallback.
+                    if width >= 100:
+                        skl_label = self._build_skills_label(snapshot)
+                        if skl_label:
+                            frags.append(("class:status-bar-dim", " │ "))
+                            frags.append(("class:status-bar-dim", skl_label))
                     if goal_segment:
                         frags.append(("class:status-bar-dim", " │ "))
                         frags.append(("class:status-bar-strong", goal_segment))
@@ -11792,7 +11956,7 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         """Render file edits with inline diff after write-capable tools complete."""
         # A top-level delegate_task dispatches in the background and re-enters as
         # a fresh turn when done. Say so once — no spinner, nothing to poll — so
-        # the idle prompt doesn't read as "nothing happened" (⛓ tracks the work).
+        # the idle prompt doesn't read as "nothing happened" (🏃 tracks the work).
         if function_name == "delegate_task":
             try:
                 parsed = json.loads(function_result) if isinstance(function_result, str) else (function_result or {})
