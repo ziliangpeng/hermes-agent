@@ -1924,6 +1924,7 @@ _SYNTHETIC_USER_PREFIXES = (
     "[System: Your previous tool call",
     "[Your active task list was preserved across context compression]",
     "[IMPORTANT: Background process ",
+    "[System corrective continuation: tool execution required]",
 )
 
 
@@ -1946,6 +1947,7 @@ _SYNTHETIC_USER_FLAGS = (
     "_verification_stop_synthetic",
     "_pre_verify_synthetic",
     "_dropped_toolcall_nudge",
+    "_action_stall_continuation",
 )
 
 
