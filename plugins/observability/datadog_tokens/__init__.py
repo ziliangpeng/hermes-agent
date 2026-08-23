@@ -156,6 +156,10 @@ def _extract_usage(usage: Any) -> dict[str, int]:
                     result[key] = int(val)
                 except (TypeError, ValueError):
                     pass
+        # Hermes CanonicalUsage uses output_tokens, not completion_tokens.
+        # Alias it so the plugin can always look up completion_tokens.
+        if "completion_tokens" not in result and "output_tokens" in result:
+            result["completion_tokens"] = result["output_tokens"]
         return result
 
     # Object with attributes (e.g. litellm.Usage)
@@ -172,6 +176,8 @@ def _extract_usage(usage: Any) -> dict[str, int]:
                 result[attr] = int(val)
             except (TypeError, ValueError):
                 pass
+    if "completion_tokens" not in result and "output_tokens" in result:
+        result["completion_tokens"] = result["output_tokens"]
     return result
 
 
