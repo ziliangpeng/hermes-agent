@@ -1,0 +1,11 @@
+name: datadog_tokens
+version: "1.0.0"
+description: "Emit per-API-call token counts as DogStatsD Counter metrics labeled by model and provider. Opt-in via `hermes plugins enable observability/datadog_tokens` or `hermes tools → Datadog Token Metrics`."
+author: ziliangpeng
+requires_env:
+  - HERMES_DATADOG_TOKENS_ENABLED
+optional_env:
+  - HERMES_DATADOG_AGENT_HOST
+  - HERMES_DATADOG_AGENT_PORT
+hooks:
+  - post_api_request
