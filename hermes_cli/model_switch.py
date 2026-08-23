@@ -472,9 +472,6 @@ MODEL_ALIASES: dict[str, ModelIdentity] = {
     # DeepSeek
     "deepseek":  ModelIdentity("deepseek", "deepseek-chat"),
 
-    # X.AI
-    "grok":      ModelIdentity("x-ai", "grok"),
-
     # Meta
     "llama":     ModelIdentity("meta-llama", "llama"),
 
