@@ -41,7 +41,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 try:
-    from datadog import DogStatsD
+    from datadog import DogStatsd as DogStatsD
 except Exception:  # pragma: no cover - fail-open when optional dep is missing
     DogStatsD = None
 
