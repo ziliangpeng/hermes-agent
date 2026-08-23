@@ -1287,6 +1287,12 @@ def normalize_usage(
             reasoning_tokens = _to_int(
                 getattr(completion_details, "reasoning_tokens", 0)
             )
+    if not reasoning_tokens and output_details:
+        # Anthropic reports thinking tokens as "thinking_tokens" (not
+        # "reasoning_tokens") inside output_tokens_details. Map it so
+        # reasoning/thinking spend is visible in session accounting and
+        # observability plugins.
+        reasoning_tokens = _usage_count(_usage_get(output_details, "thinking_tokens", 0))
 
     return CanonicalUsage(
         input_tokens=input_tokens,
