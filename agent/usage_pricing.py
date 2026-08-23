@@ -1395,6 +1395,12 @@ def normalize_usage(
             reasoning_tokens = _usage_count(
                 _usage_get(completion_details, "reasoning_tokens", 0)
             )
+    if not reasoning_tokens and output_details:
+        # Anthropic reports thinking tokens as "thinking_tokens" (not
+        # "reasoning_tokens") inside output_tokens_details. Map it so
+        # reasoning/thinking spend is visible in session accounting and
+        # observability plugins.
+        reasoning_tokens = _usage_count(_usage_get(output_details, "thinking_tokens", 0))
 
     # Cache observability for MiniMax's Anthropic wire: on MiniMax-M3,
     # usage.cache_read_input_tokens carries a constant +128 floor and
