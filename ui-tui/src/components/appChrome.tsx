@@ -680,15 +680,17 @@ export function StatusRule({
   const _ttftText = hasNumber(_ttft)
     ? _ttft! < 1 ? `${Math.round(_ttft! * 1000)}ms` : `${_ttft!.toFixed(1)}s`
     : ''
-  const _tpotText = hasNumber(usage.tpot_ms) ? `${Math.round(usage.tpot_ms!)}ms` : ''
-  const _tpsText = hasNumber(usage.tok_per_s) ? `${Math.round(usage.tok_per_s!)}/s` : ''
-  const perfLabel = _ttftText ? `⏱${_ttftText} ${_tpotText} ${_tpsText}`.trim() : ''
+  const _perfRestParts = [
+    hasNumber(usage.tpot_ms) ? `${Math.round(usage.tpot_ms!)}ms` : '',
+    hasNumber(usage.tok_per_s) ? `${Math.round(usage.tok_per_s!)}/s` : '',
+  ].filter(Boolean)
+  const _perfRestText = _perfRestParts.join(' ')
+  const perfLabel = _ttftText ? `⏱${_ttftText}${_perfRestText ? ` ${_perfRestText}` : ''}` : ''
   const perfTTFTColor = hasNumber(_ttft)
     ? _ttft! >= 15 ? t.color.statusCritical
       : _ttft! >= 8 ? t.color.warn
       : t.color.muted
     : t.color.muted
-  const perfRestText = perfLabel ? perfLabel.slice(perfLabel.indexOf(' ') + 1) : ''
   const showPerf = !!perfLabel && fits(SEP + stringWidth(perfLabel))
 
   const memoryLabel = memoryProfileLabel(usage)
@@ -833,7 +835,7 @@ export function StatusRule({
           <Text wrap="truncate-end">
             <Text color={t.color.muted}>{' │ '}</Text>
             <Text color={perfTTFTColor}>{`⏱${_ttftText}`}</Text>
-            <Text color={t.color.muted}>{perfRestText ? ` ${perfRestText}` : ''}</Text>
+            <Text color={t.color.muted}>{_perfRestText ? ` ${_perfRestText}` : ''}</Text>
           </Text>
         ) : null}
         {showMemSkl ? (

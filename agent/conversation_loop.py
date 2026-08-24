@@ -4184,15 +4184,16 @@ def run_conversation(
                     # TTFT = time from API request to first streamed chunk.
                     # TPOT = average time per output token after TTFT.
                     # tok/s = output throughput (completion_tokens / generation time).
+                    # Consume-and-clear: a multi-call turn (tool use → continue)
+                    # must not reuse a stale first_chunk_at from an earlier call.
                     _first_chunk = getattr(agent, "_stream_first_chunk_at", None)
                     if _first_chunk is not None and api_duration > 0 and completion_tokens > 0:
-                        _ttft = _first_chunk - api_start_time
-                        if _ttft < 0:
-                            _ttft = 0
+                        _ttft = max(0, _first_chunk - api_start_time)
                         _gen_time = api_duration - _ttft
                         agent._last_ttft_s = round(_ttft, 2)
                         agent._last_tpot_ms = round(_gen_time / completion_tokens * 1000, 1) if _gen_time > 0 else 0
                         agent._last_tok_per_s = round(completion_tokens / _gen_time, 1) if _gen_time > 0 else 0
+                    agent._stream_first_chunk_at = None
                     # On the MoA path, agent.model/provider are the virtual
                     # preset name ("closed") and "moa", which have no pricing
                     # entry — estimating against them returns None and silently
