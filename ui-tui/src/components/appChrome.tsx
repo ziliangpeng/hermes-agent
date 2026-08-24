@@ -721,6 +721,26 @@ export function StatusRule({
   // Dev-gated readout (HERMES_DEV_CREDITS), low priority.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
 
+  // Per-turn latency: TTFT + TPOT + tok/s. Shows previous turn's numbers.
+  // Self-hides until the first turn completes (no ttft_s in usage).
+  // TTFT is color-coded: muted <8s, warn 8-15s, critical >15s (overloaded).
+  const _ttft = usage.ttft_s
+  const _ttftText = hasNumber(_ttft)
+    ? _ttft! < 1 ? `${Math.round(_ttft! * 1000)}ms` : `${_ttft!.toFixed(1)}s`
+    : ''
+  const _perfRestParts = [
+    hasNumber(usage.tpot_ms) ? `${Math.round(usage.tpot_ms!)}ms` : '',
+    hasNumber(usage.tok_per_s) ? `${Math.round(usage.tok_per_s!)}/s` : '',
+  ].filter(Boolean)
+  const _perfRestText = _perfRestParts.join(' ')
+  const perfLabel = _ttftText ? `⏱${_ttftText}${_perfRestText ? ` ${_perfRestText}` : ''}` : ''
+  const perfTTFTColor = hasNumber(_ttft)
+    ? _ttft! >= 15 ? t.color.statusCritical
+      : _ttft! >= 8 ? t.color.warn
+      : t.color.muted
+    : t.color.muted
+  const showPerf = !!perfLabel && fits(SEP + stringWidth(perfLabel))
+
   const memoryLabel = memoryProfileLabel(usage)
   const skillsStr = skillsLabel(usage)
   const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
@@ -890,6 +910,13 @@ export function StatusRule({
           <Text color={t.color.accent} wrap="truncate-end">
             {' │ '}
             {devCreditsText}
+          </Text>
+        ) : null}
+        {showPerf ? (
+          <Text wrap="truncate-end">
+            <Text color={t.color.muted}>{' │ '}</Text>
+            <Text color={perfTTFTColor}>{`⏱${_ttftText}`}</Text>
+            <Text color={t.color.muted}>{_perfRestText ? ` ${_perfRestText}` : ''}</Text>
           </Text>
         ) : null}
         {showMemSkl ? (
