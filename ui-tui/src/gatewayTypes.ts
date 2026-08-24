@@ -277,6 +277,7 @@ export interface SessionUsageResponse {
   avg_latency_s?: number
   avg_tps?: number
   cache_hit_pct?: number
+  completed_subagents?: number
   cache_read?: number
   cache_write?: number
   calls?: number
