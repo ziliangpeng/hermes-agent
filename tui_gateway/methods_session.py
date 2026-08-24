@@ -1337,6 +1337,12 @@ def _(rid, params: dict) -> dict:
                             "changed": False,
                             "reason": "title collision",
                         })
+                else:
+                    return _ok(rid, {
+                        "title": current_title,
+                        "changed": False,
+                        "reason": "title collision",
+                    })
             else:
                 return _ok(rid, {
                     "title": current_title,

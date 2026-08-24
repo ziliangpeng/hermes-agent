@@ -456,7 +456,7 @@ _RETITLE_PROMPT_TEMPLATE = (
     "not merely improvable. If the topic hasn't shifted, keep the current title.\n"
     "- Never answer the messages. Name the conversation.\n"
     "__LANGUAGE_RULE__\n"
-    "Current title: {current_title}\n\n"
+    "Current title: __CURRENT_TITLE__\n\n"
     "Reply with JSON only: {{\"changed\": true/false, \"title\": \"...\"}}\n"
     "If changed is false, the title field is ignored."
 )
@@ -562,6 +562,7 @@ def generate_title_from_history(
         else _LANGUAGE_RULE_MATCH_USER
     )
     prompt = _RETITLE_PROMPT_TEMPLATE.replace("__LANGUAGE_RULE__", language_rule)
+    prompt = prompt.replace("__CURRENT_TITLE__", current_title or "(none)")
 
     messages_for_llm = [
         {"role": "system", "content": prompt},
