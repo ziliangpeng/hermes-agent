@@ -675,9 +675,20 @@ export function StatusRule({
 
   // Per-turn latency: TTFT + TPOT + tok/s. Shows previous turn's numbers.
   // Self-hides until the first turn completes (no ttft_s in usage).
-  const perfLabel = hasNumber(usage.ttft_s)
-    ? `⏱${usage.ttft_s! < 1 ? `${Math.round(usage.ttft_s! * 1000)}ms` : `${usage.ttft_s!.toFixed(1)}s`} ${Math.round(usage.tpot_ms ?? 0)}ms ${Math.round(usage.tok_per_s ?? 0)}/s`
+  // TTFT is color-coded: muted <8s, warn 8-15s, critical >15s (overloaded).
+  const _ttft = usage.ttft_s
+  const _ttftText = hasNumber(_ttft)
+    ? _ttft! < 1 ? `${Math.round(_ttft! * 1000)}ms` : `${_ttft!.toFixed(1)}s`
     : ''
+  const _tpotText = hasNumber(usage.tpot_ms) ? `${Math.round(usage.tpot_ms!)}ms` : ''
+  const _tpsText = hasNumber(usage.tok_per_s) ? `${Math.round(usage.tok_per_s!)}/s` : ''
+  const perfLabel = _ttftText ? `⏱${_ttftText} ${_tpotText} ${_tpsText}`.trim() : ''
+  const perfTTFTColor = hasNumber(_ttft)
+    ? _ttft! >= 15 ? t.color.statusCritical
+      : _ttft! >= 8 ? t.color.warn
+      : t.color.muted
+    : t.color.muted
+  const perfRestText = perfLabel ? perfLabel.slice(perfLabel.indexOf(' ') + 1) : ''
   const showPerf = !!perfLabel && fits(SEP + stringWidth(perfLabel))
 
   const memoryLabel = memoryProfileLabel(usage)
@@ -819,9 +830,10 @@ export function StatusRule({
           </Text>
         ) : null}
         {showPerf ? (
-          <Text color={t.color.muted} wrap="truncate-end">
-            {' │ '}
-            {perfLabel}
+          <Text wrap="truncate-end">
+            <Text color={t.color.muted}>{' │ '}</Text>
+            <Text color={perfTTFTColor}>{`⏱${_ttftText}`}</Text>
+            <Text color={t.color.muted}>{perfRestText ? ` ${perfRestText}` : ''}</Text>
           </Text>
         ) : null}
         {showMemSkl ? (
