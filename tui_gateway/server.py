@@ -5610,6 +5610,14 @@ def _get_usage(agent) -> dict:
                 usage["dev_credits_spent_micros"] = int(spent)
         except Exception:
             pass
+    # Per-turn latency metrics for the TUI status bar (TTFT, TPOT, tok/s).
+    # Updated once per turn at message.complete — shows the previous turn's
+    # numbers, consistent with all other usage fields.
+    _ttft = getattr(agent, "_last_ttft_s", None)
+    if _ttft is not None:
+        usage["ttft_s"] = _ttft
+        usage["tpot_ms"] = getattr(agent, "_last_tpot_ms", 0)
+        usage["tok_per_s"] = getattr(agent, "_last_tok_per_s", 0)
     return usage
 
 
