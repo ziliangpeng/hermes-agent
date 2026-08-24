@@ -260,6 +260,12 @@ export interface SessionTitleResponse {
   title?: string
 }
 
+export interface SessionRetitleResponse {
+  changed?: boolean
+  reason?: string
+  title?: string
+}
+
 export interface SessionSaveResponse {
   file?: string
 }
