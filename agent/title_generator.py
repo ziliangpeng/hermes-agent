@@ -487,14 +487,13 @@ _MAX_RETITLE_SUMMARY_CHARS = 2000
 
 def _build_conversation_summary(
     messages: list,
-    current_title: str,
 ) -> str:
     """Build a compact summary of the conversation for the retitle LLM.
 
     Strategy (per Fable review): weight user messages over assistant — the topic
     lives in user messages. Include the first user message (opening intent) plus
     the last few user messages (current direction), with the head of the most
-    recent assistant reply for context. Exclude tool output entirely.
+    recent assistant reply that has non-empty text content. Exclude tool output.
     """
     from agent.message_content import flatten_message_text
 
@@ -507,10 +506,18 @@ def _build_conversation_summary(
         role = msg.get("role", "")
         if role == "user":
             text = flatten_message_text(msg.get("content")).strip()
-            if text and not text.startswith("[") and not text.startswith("<command"):
-                user_msgs.append(text[:_MAX_USER_MSG_CHARS])
+            if not text:
+                continue
+            # Skip machine-authored content that Hermes stores under role=user
+            # (compaction handoffs, model-switch markers, control wrappers).
+            # Use the same _MACHINE_PREFIXES check as is_titleable_user_message.
+            if any(text.startswith(p) for p in _MACHINE_PREFIXES):
+                continue
+            user_msgs.append(text[:_MAX_USER_MSG_CHARS])
         elif role == "assistant":
             text = flatten_message_text(msg.get("content")).strip()
+            # Only keep the last assistant message that has actual text content
+            # (skip tool_call-only messages with empty content).
             if text:
                 last_assistant = text[:_MAX_ASSISTANT_MSG_CHARS]
 
@@ -522,7 +529,7 @@ def _build_conversation_summary(
     parts.append(f"User (opening): {user_msgs[0]}")
     # Last 3-4 user messages — current direction (skip the first if it's also the last).
     tail = user_msgs[1:][-4:]
-    for i, msg in enumerate(tail):
+    for msg in tail:
         parts.append(f"User: {msg}")
     if last_assistant:
         parts.append(f"Assistant (latest): {last_assistant}")
@@ -544,7 +551,7 @@ def generate_title_from_history(
     Returns ``(title, changed)`` where ``changed`` is False when the model
     decided the current title is still accurate. Returns ``None`` on failure.
     """
-    summary = _build_conversation_summary(messages, current_title)
+    summary = _build_conversation_summary(messages)
     if not summary:
         return None
 
@@ -588,10 +595,12 @@ def generate_title_from_history(
         if not title:
             return None
         # Answer-shaped output guard (same as generate_title).
-        if len(title.split()) > _MAX_TITLE_WORDS:
+        # CJK titles don't split on whitespace, so word count is unreliable —
+        # add a char-length cap as a second guard for CJK languages.
+        if len(title.split()) > _MAX_TITLE_WORDS or len(title) > 80:
             logger.debug(
-                "Rejecting answer-shaped retitle output (%d words > %d)",
-                len(title.split()), _MAX_TITLE_WORDS,
+                "Rejecting answer-shaped retitle output (%d words, %d chars)",
+                len(title.split()), len(title),
             )
             return None
         return (title, True)

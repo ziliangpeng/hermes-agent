@@ -298,7 +298,7 @@ export const coreCommands: SlashCommand[] = [
         .then(
           ctx.guarded<SessionRetitleResponse>(r => {
             const title = (r?.title ?? '').trim()
-            if (r?.changed) {
+            if (r?.changed && title) {
               patchUiState({ sessionTitle: title })
               ctx.transcript.sys(`retitle → ${title}`)
             } else if (r?.reason) {

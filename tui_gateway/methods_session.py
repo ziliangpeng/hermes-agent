@@ -1263,20 +1263,24 @@ def _(rid, params: dict) -> dict:
 
         # Snapshot the runtime identity for the auxiliary call.
         _agent = session.get("agent")
-        _model = getattr(_agent, "model", None) if _agent else None
-        _provider = getattr(_agent, "provider", None) if _agent else None
+        if _agent is None:
+            return _err(rid, 5024, "session agent not ready — try again after sending a message")
+
+        _model = getattr(_agent, "model", None)
+        _provider = getattr(_agent, "provider", None)
 
         from agent.title_generator import generate_title_from_history
 
         result = generate_title_from_history(
             messages=history,
             current_title=current_title,
+            timeout=30,
             main_runtime={
                 "model": _model,
                 "provider": _provider,
-                "base_url": getattr(_agent, "base_url", None) if _agent else None,
-                "api_key": getattr(_agent, "api_key", None) if _agent else None,
-                "api_mode": getattr(_agent, "api_mode", None) if _agent else None,
+                "base_url": getattr(_agent, "base_url", None),
+                "api_key": getattr(_agent, "api_key", None),
+                "api_mode": getattr(_agent, "api_mode", None),
             },
         )
 
@@ -1284,6 +1288,10 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 5023, "retitle generation failed")
 
         new_title, changed = result
+
+        # Short-circuit: LLM said "changed" but returned the same title.
+        if new_title.strip() == current_title.strip():
+            return _ok(rid, {"title": current_title, "changed": False})
 
         if not changed:
             return _ok(rid, {"title": current_title, "changed": False})
@@ -1314,10 +1322,27 @@ def _(rid, params: dict) -> dict:
                     try:
                         auto_fn = getattr(db, "set_auto_title", None)
                         if auto_fn is not None:
-                            auto_fn(key, deduped, source="llm")
+                            if not auto_fn(key, deduped, source="llm"):
+                                return _ok(rid, {
+                                    "title": current_title,
+                                    "changed": False,
+                                    "reason": "title collision — could not write",
+                                })
+                        else:
+                            db.set_session_title(key, deduped)
                         new_title = deduped
                     except Exception:
-                        pass
+                        return _ok(rid, {
+                            "title": current_title,
+                            "changed": False,
+                            "reason": "title collision",
+                        })
+            else:
+                return _ok(rid, {
+                    "title": current_title,
+                    "changed": False,
+                    "reason": "title collision",
+                })
 
         _emit_session_info_for_session(params.get("session_id", ""), session)
         return _ok(rid, {"title": new_title, "changed": True})
