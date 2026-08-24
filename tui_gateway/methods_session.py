@@ -1296,23 +1296,13 @@ def _(rid, params: dict) -> dict:
         if not changed:
             return _ok(rid, {"title": current_title, "changed": False})
 
-        # Persist with ``llm`` provenance via set_auto_title. This respects
-        # provenance: a ``user``-set title (manual /title) cannot be overwritten.
+        # Persist with ``user`` provenance — /retitle is a user-initiated
+        # action (same as /title), so the result should have the same authority
+        # as a manual title set. This also allows overwriting an existing ``llm``
+        # title, which set_auto_title(source="llm") cannot do (llm rank >= llm rank
+        # is blocked by the provenance gate).
         try:
-            auto_fn = getattr(db, "set_auto_title", None)
-            if auto_fn is not None:
-                written = auto_fn(key, new_title, source="llm")
-            else:
-                # Older store without provenance: only write if no title yet.
-                written = not db.get_session_title(key)
-                if written:
-                    db.set_session_title(key, new_title)
-            if not written:
-                return _ok(rid, {
-                    "title": current_title,
-                    "changed": False,
-                    "reason": "higher-authority title holds the row",
-                })
+            written = db.set_session_title(key, new_title)
         except ValueError:
             # Title collision — try with lineage suffix.
             next_title_fn = getattr(db, "get_next_title_in_lineage", None)
@@ -1320,16 +1310,7 @@ def _(rid, params: dict) -> dict:
                 deduped = next_title_fn(new_title)
                 if deduped and deduped != new_title:
                     try:
-                        auto_fn = getattr(db, "set_auto_title", None)
-                        if auto_fn is not None:
-                            if not auto_fn(key, deduped, source="llm"):
-                                return _ok(rid, {
-                                    "title": current_title,
-                                    "changed": False,
-                                    "reason": "title collision — could not write",
-                                })
-                        else:
-                            db.set_session_title(key, deduped)
+                        db.set_session_title(key, deduped)
                         new_title = deduped
                     except Exception:
                         return _ok(rid, {
