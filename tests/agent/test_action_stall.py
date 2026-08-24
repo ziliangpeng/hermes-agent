@@ -286,15 +286,22 @@ class TestConversationLoopNudgeContract:
         assert "from agent.action_stall import build_action_stall_continuation" in source
 
     def test_conversation_loop_uses_build_function_for_nudge(self):
-        """The nudge message content must be build_action_stall_continuation()
-        — not a hardcoded '[System: Continue now...]' string."""
+        """The stall-guard nudge must call build_action_stall_continuation()
+        rather than using the old hardcoded _CODEX_ACK_CONTINUATION_NUDGE."""
         import inspect
         from agent import conversation_loop
         source = inspect.getsource(conversation_loop)
-        # The old hardcoded nudge string must NOT be present
-        assert "[System: Continue now" not in source
-        # The new function call must be present
+        # The stall-guard section must call the build function
         assert "build_action_stall_continuation()" in source
+        # The _CODEX_ACK_CONTINUATION_NUDGE constant may exist for the
+        # context_compressor's synthetic-message detection, but the stall
+        # guard must not use it as the nudge content.
+        # Find the stall guard block and verify it uses build_action_stall_continuation
+        stall_idx = source.find("Stall guard: turn ending on trailing continue-")
+        assert stall_idx >= 0, "stall guard block not found"
+        stall_block = source[stall_idx:stall_idx + 2000]
+        assert "build_action_stall_continuation()" in stall_block
+        assert "_CODEX_ACK_CONTINUATION_NUDGE" not in stall_block
 
     def test_nudge_content_matches_build_output(self):
         """The nudge message built by the loop must produce content that
