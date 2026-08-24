@@ -7,6 +7,7 @@ import { isSectionName, nextDetailsMode, parseDetailsMode, SECTION_NAMES } from 
 import type {
   ConfigGetValueResponse,
   ConfigSetResponse,
+  SessionRetitleResponse,
   SessionSaveResponse,
   SessionStatusResponse,
   SessionSteerResponse,
@@ -276,6 +277,35 @@ export const coreCommands: SlashCommand[] = [
             const suffix = r?.pending ? ' (queued while session initializes)' : ''
             patchUiState({ sessionTitle: next })
             ctx.transcript.sys(`session title set: ${next}${suffix}`)
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    help: 'regenerate title from conversation',
+    name: 'retitle',
+    run: (_arg, ctx) => {
+      if (!ctx.sid) {
+        return ctx.transcript.sys('no active session')
+      }
+
+      ctx.transcript.sys('retitling…')
+
+      ctx.gateway
+        .rpc<SessionRetitleResponse>('session.retitle', { session_id: ctx.sid })
+        .then(
+          ctx.guarded<SessionRetitleResponse>(r => {
+            const title = (r?.title ?? '').trim()
+            if (r?.changed) {
+              patchUiState({ sessionTitle: title })
+              ctx.transcript.sys(`retitle → ${title}`)
+            } else if (r?.reason) {
+              ctx.transcript.sys(`retitle skipped: ${r.reason}`)
+            } else {
+              ctx.transcript.sys(title ? `title unchanged: ${title}` : 'title unchanged')
+            }
           })
         )
         .catch(ctx.guardedErr)

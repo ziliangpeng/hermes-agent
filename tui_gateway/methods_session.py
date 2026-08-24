@@ -1229,6 +1229,100 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 5007, str(e))
 
 
+@method("session.retitle")
+def _(rid, params: dict) -> dict:
+    """Regenerate the session title from the full conversation history.
+
+    Calls the auxiliary LLM with a compact summary of the conversation (first
+    user message + recent user messages + last assistant reply) and asks it to
+    produce a title that reflects the current topic. Uses ``llm`` provenance
+    (not ``user``) so the result is distinguishable from a manual ``/title`` set
+    and can be overwritten by a later auto-refresh.
+
+    The call runs synchronously — the TUI shows a "retitling…" message while
+    waiting, then updates the sidebar on success.
+    """
+    session, err = _sess_nowait(params, rid)
+    if err:
+        return err
+    with _session_db(session) as db:
+        if db is None:
+            return _db_unavailable_error(rid, code=5007)
+        key = session["session_key"]
+
+        # Read current title.
+        try:
+            current_title = db.get_session_title(key) or ""
+        except Exception:
+            current_title = ""
+
+        # Gather conversation history from the live session.
+        history = list(session.get("history", []))
+        if not history:
+            return _err(rid, 4022, "no conversation to retitle from")
+
+        # Snapshot the runtime identity for the auxiliary call.
+        _agent = session.get("agent")
+        _model = getattr(_agent, "model", None) if _agent else None
+        _provider = getattr(_agent, "provider", None) if _agent else None
+
+        from agent.title_generator import generate_title_from_history
+
+        result = generate_title_from_history(
+            messages=history,
+            current_title=current_title,
+            main_runtime={
+                "model": _model,
+                "provider": _provider,
+                "base_url": getattr(_agent, "base_url", None) if _agent else None,
+                "api_key": getattr(_agent, "api_key", None) if _agent else None,
+                "api_mode": getattr(_agent, "api_mode", None) if _agent else None,
+            },
+        )
+
+        if result is None:
+            return _err(rid, 5023, "retitle generation failed")
+
+        new_title, changed = result
+
+        if not changed:
+            return _ok(rid, {"title": current_title, "changed": False})
+
+        # Persist with ``llm`` provenance via set_auto_title. This respects
+        # provenance: a ``user``-set title (manual /title) cannot be overwritten.
+        try:
+            auto_fn = getattr(db, "set_auto_title", None)
+            if auto_fn is not None:
+                written = auto_fn(key, new_title, source="llm")
+            else:
+                # Older store without provenance: only write if no title yet.
+                written = not db.get_session_title(key)
+                if written:
+                    db.set_session_title(key, new_title)
+            if not written:
+                return _ok(rid, {
+                    "title": current_title,
+                    "changed": False,
+                    "reason": "higher-authority title holds the row",
+                })
+        except ValueError:
+            # Title collision — try with lineage suffix.
+            next_title_fn = getattr(db, "get_next_title_in_lineage", None)
+            if next_title_fn is not None:
+                deduped = next_title_fn(new_title)
+                if deduped and deduped != new_title:
+                    try:
+                        auto_fn = getattr(db, "set_auto_title", None)
+                        if auto_fn is not None:
+                            auto_fn(key, deduped, source="llm")
+                        new_title = deduped
+                    except Exception:
+                        pass
+
+        _emit_session_info_for_session(params.get("session_id", ""), session)
+        return _ok(rid, {"title": new_title, "changed": True})
+
+
 @method("session.set_hidden")
 def _(rid, params: dict) -> dict:
     """Set/clear the generic ``hidden`` flag on a session (and its lineage).

@@ -441,6 +441,166 @@ def generate_title(
         return None
 
 
+# --- Retitle from conversation history ---
+
+_RETITLE_PROMPT_TEMPLATE = (
+    "You name chat sessions. The conversation has evolved — generate a NEW title "
+    "that reflects what the conversation is NOW about, not just how it started.\n\n"
+    "Rules:\n"
+    "- 3 to 7 words, sentence case (capitalize only the first word and proper nouns).\n"
+    "- Name the main TOPIC or OUTCOME, not the opening question.\n"
+    "- Keep technical terms, filenames, numbers, and error codes exact.\n"
+    "- Drop filler words: the, this, my, a, an.\n"
+    "- No trailing punctuation, no quotes, no tool names, no 'Title:' prefix.\n"
+    "- Only change the title if the current one is misleading or wrong, "
+    "not merely improvable. If the topic hasn't shifted, keep the current title.\n"
+    "- Never answer the messages. Name the conversation.\n"
+    "__LANGUAGE_RULE__\n"
+    "Current title: {current_title}\n\n"
+    "Reply with JSON only: {{\"changed\": true/false, \"title\": \"...\"}}\n"
+    "If changed is false, the title field is ignored."
+)
+
+_RETITLE_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "session_retitle",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "changed": {"type": "boolean"},
+                "title": {"type": "string"},
+            },
+            "required": ["changed", "title"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+# Cap on each message snippet fed to the retitle summary. User messages carry
+# the topic; assistant messages are padded and long, so we keep them shorter.
+_MAX_USER_MSG_CHARS = 300
+_MAX_ASSISTANT_MSG_CHARS = 150
+_MAX_RETITLE_SUMMARY_CHARS = 2000
+
+
+def _build_conversation_summary(
+    messages: list,
+    current_title: str,
+) -> str:
+    """Build a compact summary of the conversation for the retitle LLM.
+
+    Strategy (per Fable review): weight user messages over assistant — the topic
+    lives in user messages. Include the first user message (opening intent) plus
+    the last few user messages (current direction), with the head of the most
+    recent assistant reply for context. Exclude tool output entirely.
+    """
+    from agent.message_content import flatten_message_text
+
+    user_msgs: list[str] = []
+    last_assistant = ""
+
+    for msg in messages or []:
+        if not isinstance(msg, dict):
+            continue
+        role = msg.get("role", "")
+        if role == "user":
+            text = flatten_message_text(msg.get("content")).strip()
+            if text and not text.startswith("[") and not text.startswith("<command"):
+                user_msgs.append(text[:_MAX_USER_MSG_CHARS])
+        elif role == "assistant":
+            text = flatten_message_text(msg.get("content")).strip()
+            if text:
+                last_assistant = text[:_MAX_ASSISTANT_MSG_CHARS]
+
+    if not user_msgs:
+        return ""
+
+    parts: list[str] = []
+    # First user message — opening intent.
+    parts.append(f"User (opening): {user_msgs[0]}")
+    # Last 3-4 user messages — current direction (skip the first if it's also the last).
+    tail = user_msgs[1:][-4:]
+    for i, msg in enumerate(tail):
+        parts.append(f"User: {msg}")
+    if last_assistant:
+        parts.append(f"Assistant (latest): {last_assistant}")
+
+    summary = "\n".join(parts)
+    if len(summary) > _MAX_RETITLE_SUMMARY_CHARS:
+        summary = summary[:_MAX_RETITLE_SUMMARY_CHARS] + "…"
+    return summary
+
+
+def generate_title_from_history(
+    messages: list,
+    current_title: str,
+    timeout: Optional[float] = None,
+    main_runtime: dict = None,
+) -> Optional[tuple]:
+    """Generate a new title from the full conversation history.
+
+    Returns ``(title, changed)`` where ``changed`` is False when the model
+    decided the current title is still accurate. Returns ``None`` on failure.
+    """
+    summary = _build_conversation_summary(messages, current_title)
+    if not summary:
+        return None
+
+    language = _title_language()
+    language_rule = (
+        _LANGUAGE_RULE_PINNED.format(language=language)
+        if language
+        else _LANGUAGE_RULE_MATCH_USER
+    )
+    prompt = _RETITLE_PROMPT_TEMPLATE.replace("__LANGUAGE_RULE__", language_rule)
+
+    messages_for_llm = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": summary},
+    ]
+
+    try:
+        response = call_llm(
+            task="title_generation",
+            messages=messages_for_llm,
+            max_tokens=64,
+            temperature=0.3,
+            timeout=timeout,
+            main_runtime=main_runtime,
+            extra_body={"response_format": _RETITLE_RESPONSE_FORMAT},
+        )
+        content = response.choices[0].message.content or ""
+        raw = content.strip()
+        # Fenced JSON from providers that wrap structured output in markdown.
+        fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", raw, re.DOTALL)
+        if fenced:
+            raw = fenced.group(1).strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None
+        changed = bool(parsed.get("changed", True))
+        title_text = str(parsed.get("title", "")).strip()
+        if not changed:
+            return (current_title, False)
+        title = _clean_title(title_text)
+        if not title:
+            return None
+        # Answer-shaped output guard (same as generate_title).
+        if len(title.split()) > _MAX_TITLE_WORDS:
+            logger.debug(
+                "Rejecting answer-shaped retitle output (%d words > %d)",
+                len(title.split()), _MAX_TITLE_WORDS,
+            )
+            return None
+        return (title, True)
+    except Exception as e:
+        logger.warning("Retitle generation failed: %s", e)
+        logger.debug("Retitle generation traceback", exc_info=True)
+        return None
+
+
 def _persist_session_title(session_db, session_id, title, *, source, dedupe=True):
     """Persist a title at *source* authority, recovering from name collisions.
 
