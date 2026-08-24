@@ -733,7 +733,7 @@ export function StatusRule({
     hasNumber(usage.tok_per_s) ? `${Math.round(usage.tok_per_s!)}/s` : '',
   ].filter(Boolean)
   const _perfRestText = _perfRestParts.join(' ')
-  const perfLabel = _ttftText ? `⏱${_ttftText}${_perfRestText ? ` ${_perfRestText}` : ''}` : ''
+  const perfLabel = _ttftText ? `🕐 ${_ttftText}${_perfRestText ? ` ${_perfRestText}` : ''}` : ''
   const perfTTFTColor = hasNumber(_ttft)
     ? _ttft! >= 15 ? t.color.statusCritical
       : _ttft! >= 8 ? t.color.warn
@@ -915,7 +915,7 @@ export function StatusRule({
         {showPerf ? (
           <Text wrap="truncate-end">
             <Text color={t.color.muted}>{' │ '}</Text>
-            <Text color={perfTTFTColor}>{`⏱${_ttftText}`}</Text>
+            <Text color={perfTTFTColor}>{`🕐 ${_ttftText}`}</Text>
             <Text color={t.color.muted}>{_perfRestText ? ` ${_perfRestText}` : ''}</Text>
           </Text>
         ) : null}
