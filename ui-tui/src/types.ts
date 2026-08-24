@@ -225,6 +225,9 @@ export interface Usage {
   reasoning?: number
   skill_count?: number
   total: number
+  ttft_s?: number
+  tpot_ms?: number
+  tok_per_s?: number
   user_chars?: number
   user_limit?: number
 }

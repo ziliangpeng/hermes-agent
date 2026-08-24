@@ -673,6 +673,13 @@ export function StatusRule({
   // Dev-gated readout (HERMES_DEV_CREDITS), low priority.
   const showDevCredits = !!devCreditsText && fits(SEP + stringWidth(devCreditsText))
 
+  // Per-turn latency: TTFT + TPOT + tok/s. Shows previous turn's numbers.
+  // Self-hides until the first turn completes (no ttft_s in usage).
+  const perfLabel = hasNumber(usage.ttft_s)
+    ? `⏱${usage.ttft_s! < 1 ? `${Math.round(usage.ttft_s! * 1000)}ms` : `${usage.ttft_s!.toFixed(1)}s`} ${Math.round(usage.tpot_ms ?? 0)}ms ${Math.round(usage.tok_per_s ?? 0)}/s`
+    : ''
+  const showPerf = !!perfLabel && fits(SEP + stringWidth(perfLabel))
+
   const memoryLabel = memoryProfileLabel(usage)
   const skillsStr = skillsLabel(usage)
   const memSklLabel = [memoryLabel, skillsStr].filter(Boolean).join(' · ')
@@ -809,6 +816,12 @@ export function StatusRule({
           <Text color={t.color.accent} wrap="truncate-end">
             {' │ '}
             {devCreditsText}
+          </Text>
+        ) : null}
+        {showPerf ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}
+            {perfLabel}
           </Text>
         ) : null}
         {showMemSkl ? (
