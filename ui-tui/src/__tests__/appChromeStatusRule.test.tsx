@@ -1,7 +1,16 @@
 import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { StatusRule, ctxBarColor, ctxBarHalf, memoryProfileLabel, shortModelLabel, skillsLabel, statusBarSegments, statusRuleWidths } from '../components/appChrome.js'
+import {
+  ctxBarColor,
+  ctxBarHalf,
+  memoryProfileLabel,
+  shortModelLabel,
+  skillsLabel,
+  statusBarSegments,
+  StatusRule,
+  statusRuleWidths
+} from '../components/appChrome.js'
 import { DEFAULT_THEME } from '../theme.js'
 
 type ReactNodeLike = React.ReactNode
@@ -105,14 +114,12 @@ const baseProps = {
 }
 
 describe('StatusRule model short names', () => {
-  it.each([
-    'glm53',
-    'glm-5.3',
-    'glm-53-flash',
-    'custom:midagent/glm-53-flash-fp8-mi350'
-  ])('renders %s as G53', model => {
-    expect(shortModelLabel(model)).toBe('G53')
-  })
+  it.each(['glm53', 'glm-5.3', 'glm-53-flash', 'custom:midagent/glm-53-flash-fp8-mi350'])(
+    'renders %s as G53',
+    model => {
+      expect(shortModelLabel(model)).toBe('G53')
+    }
+  )
 })
 
 describe('StatusRule session title', () => {
@@ -684,41 +691,65 @@ describe('StatusRule session duration', () => {
       ...baseProps,
       sessionStartedAt: Date.now() - 5 * 60_000
     })
+
     // SessionDuration uses hooks — verify the component is present in tree
     const findComp = (node: ReactNodeLike): any => {
-      if (!node || typeof node !== 'object') return null
-      if ((node as any).type?.name === 'SessionDuration') return node
+      if (!node || typeof node !== 'object') {
+        return null
+      }
+
+      if ((node as any).type?.name === 'SessionDuration') {
+        return node
+      }
       const children = (node as any).props?.children
+
       if (Array.isArray(children)) {
         for (const c of children) {
           const found = findComp(c)
-          if (found) return found
+
+          if (found) {
+            return found
+          }
         }
       } else if (children) {
         return findComp(children)
       }
+
       return null
     }
+
     expect(findComp(element)).not.toBeNull()
   })
 
   it('hides duration when sessionStartedAt is null', () => {
     const element = StatusRule({ ...baseProps, sessionStartedAt: null })
+
     // SessionDuration component should not be in the tree
     const findComp = (node: ReactNodeLike): any => {
-      if (!node || typeof node !== 'object') return null
-      if ((node as any).type?.name === 'SessionDuration') return node
+      if (!node || typeof node !== 'object') {
+        return null
+      }
+
+      if ((node as any).type?.name === 'SessionDuration') {
+        return node
+      }
       const children = (node as any).props?.children
+
       if (Array.isArray(children)) {
         for (const c of children) {
           const found = findComp(c)
-          if (found) return found
+
+          if (found) {
+            return found
+          }
         }
       } else if (children) {
         return findComp(children)
       }
+
       return null
     }
+
     expect(findComp(element)).toBeNull()
   })
 })
@@ -731,6 +762,7 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 3 }
     })
+
     expect(textContent(element)).toContain('cmp 3')
   })
 
@@ -739,6 +771,7 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 0 }
     })
+
     expect(textContent(element)).not.toContain('cmp')
   })
 
@@ -747,6 +780,7 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 5 }
     })
+
     const cmpEl = findElementWithText(element, 'cmp 5')
     expect(cmpEl).not.toBeNull()
     expect(cmpEl?.props.color).toBe(DEFAULT_THEME.color.warn)
@@ -757,6 +791,7 @@ describe('StatusRule compressions', () => {
       ...baseProps,
       usage: { ...baseProps.usage, compressions: 10 }
     })
+
     const cmpEl = findElementWithText(element, 'cmp 10')
     expect(cmpEl).not.toBeNull()
     expect(cmpEl?.props.color).toBe(DEFAULT_THEME.color.error)
@@ -767,7 +802,12 @@ describe('StatusRule compressions', () => {
 
 describe('memoryProfileLabel', () => {
   it('shows memory and user percentages', () => {
-    const label = memoryProfileLabel({ memory_chars: 10000, memory_limit: 50000, user_chars: 5000, user_limit: 10000 } as any)
+    const label = memoryProfileLabel({
+      memory_chars: 10000,
+      memory_limit: 50000,
+      user_chars: 5000,
+      user_limit: 10000
+    } as any)
     expect(label).toBe('M20% U50%')
   })
 
@@ -804,6 +844,7 @@ describe('StatusRule memSkl segment', () => {
         skill_count: 42
       } as any
     })
+
     const rendered = textContent(element)
     expect(rendered).toContain('M20%')
     expect(rendered).toContain('U50%')
@@ -895,6 +936,7 @@ describe('StatusRule edge cases', () => {
       ...baseProps,
       usage: { ...baseProps.usage, context_max: 0, context_used: 0, context_percent: 0 } as any
     })
+
     expect(textContent(element)).toContain('ready')
   })
 
@@ -908,6 +950,7 @@ describe('StatusRule edge cases', () => {
       ...baseProps,
       usage: { ...baseProps.usage, context_percent: undefined as unknown as number } as any
     })
+
     expect(textContent(element)).toContain('ready')
   })
 })
