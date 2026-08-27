@@ -1,7 +1,7 @@
 import React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { StatusRule, statusRuleWidths, statusBarSegments, ctxBarColor, ctxBarHalf, memoryProfileLabel, skillsLabel } from '../components/appChrome.js'
+import { StatusRule, ctxBarColor, ctxBarHalf, memoryProfileLabel, shortModelLabel, skillsLabel, statusBarSegments, statusRuleWidths } from '../components/appChrome.js'
 import { DEFAULT_THEME } from '../theme.js'
 
 type ReactNodeLike = React.ReactNode
@@ -103,6 +103,17 @@ const baseProps = {
   usage: { context_max: 200_000, context_percent: 25, context_used: 50_000, total: 50_000 },
   voiceLabel: ''
 }
+
+describe('StatusRule model short names', () => {
+  it.each([
+    'glm53',
+    'glm-5.3',
+    'glm-53-flash',
+    'custom:midagent/glm-53-flash-fp8-mi350'
+  ])('renders %s as G53', model => {
+    expect(shortModelLabel(model)).toBe('G53')
+  })
+})
 
 describe('StatusRule session title', () => {
   it('pins the named session at the far-right edge instead of the cwd label', () => {
