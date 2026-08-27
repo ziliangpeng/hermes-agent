@@ -287,9 +287,10 @@ describe('status-chrome timers under an occluding overlay', () => {
     patchOverlayState({ sessions: true })
 
     const rule = mount(idleProps)
+    await flush()
 
     expect(rule.output()).toContain('1m 0s')
-    expect(rule.output()).toContain('✓ 5s')
+    expect(rule.output()).toContain('🔥 ready 5s')
 
     // Five minutes of wall clock elapse while the overlay covers the rule.
     nowSpy.mockReturnValue(T0 + 300_000)
@@ -301,7 +302,7 @@ describe('status-chrome timers under an occluding overlay', () => {
 
     // Caught up to real elapsed time, not stuck on the pre-overlay values.
     expect(resumed).toContain('6m 0s')
-    expect(resumed).toContain('✓ 5m 5s')
+    expect(resumed).toContain('🔥 ready 5m 5s')
     expect(resumed).not.toContain('1m 0s')
 
     // …and the clocks are running again.
