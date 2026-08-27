@@ -476,6 +476,12 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   "glm52 a2": "G52a2",
   "glm 52 fp8 mi350": "G52a4",
   "glm 52 fp8 mi325": "G52a2",
+  // GLM-5.3 Flash
+  "glm53": "G53",
+  "glm 5.3": "G53",
+  "glm 53 flash": "G53",
+  "glm 5.3 flash": "G53",
+  "glm 53 flash fp8 mi350": "G53",
   "ziliang kimi k3 speedrun": "K3",
   // Anthropic
   "fable 5": "f5",
@@ -492,7 +498,7 @@ const _MODEL_SHORT_NAMES: Record<string, string> = {
   "haiku 4.5": "h4.5",
 }
 
-const shortModelLabel = (model: string) => {
+export const shortModelLabel = (model: string) => {
   const short = model
     .split('/')
     .pop()!
