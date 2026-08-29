@@ -76,14 +76,24 @@ class TestCLIStatusBar:
         assert snapshot["session_title"] == "user-profiles"
 
     def test_snapshot_shortens_glm53_model_names(self):
+        # GLM-5.3 full (743B) → G53
         for model in (
             "glm53",
             "glm-5.3",
+            "glm-53-fp8-mi325",
+            "custom:midagent/glm-53-fp8-mi325",
+        ):
+            snapshot = _make_cli(model)._get_status_bar_snapshot()
+            assert snapshot["model_short"] == "G53", f"{model} should be G53"
+
+        # GLM-5.3 Flash (320B) → G53f
+        for model in (
+            "glm53f",
             "glm-53-flash",
             "custom:midagent/glm-53-flash-fp8-mi350",
         ):
             snapshot = _make_cli(model)._get_status_bar_snapshot()
-            assert snapshot["model_short"] == "G53"
+            assert snapshot["model_short"] == "G53f", f"{model} should be G53f"
 
     def test_status_bar_config_helper_treats_persisted_off_as_hidden(self):
         for value in (False, "off", "false", "hidden", "no", "0"):
