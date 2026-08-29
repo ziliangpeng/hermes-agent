@@ -163,7 +163,10 @@ def _reverse_alias_for_display(model_name: str) -> str:
         except Exception:
             pass
         _REVERSE_ALIAS_CACHE = rmap
-    return _REVERSE_ALIAS_CACHE.get(model_name, model_name)
+    # rmap keys have the provider prefix stripped (e.g. "glm-53-fp8-mi325",
+    # not "custom:midagent/glm-53-fp8-mi325"), so strip it here too.
+    lookup_key = model_name.split("/", 1)[1] if "/" in model_name else model_name
+    return _REVERSE_ALIAS_CACHE.get(lookup_key, model_name)
 
 
 def format_token_count_compact(*args, **kwargs):
