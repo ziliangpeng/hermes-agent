@@ -2156,6 +2156,60 @@ def list_available_providers() -> list[dict[str, str]]:
     return result
 
 
+def split_custom_provider_model_spec(
+    spec: str,
+    custom_providers: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[tuple[str, str]]:
+    """Split a ``custom:<provider-name>/<model-id>`` spec into its parts.
+
+    Returns ``(provider, model_id)`` — e.g.
+    ``custom:midagent/glm-53-fp8-mi325-max`` →
+    ``("custom:midagent", "glm-53-fp8-mi325-max")`` — or ``None`` when the
+    spec is not a custom-provider-scoped model path. ``<provider-name>`` must
+    match a configured ``custom_providers`` entry (its ``name`` or
+    ``provider_key``, case-insensitive) so OpenRouter-style ``vendor/model``
+    ids passed to the bare custom endpoint are never misparsed.
+    """
+    text = (spec or "").strip()
+    if not text.lower().startswith("custom:"):
+        return None
+    rest = text[len("custom:"):]
+    slash = rest.find("/")
+    if slash <= 0 or slash == len(rest) - 1:
+        return None
+    name = rest[:slash].strip().lower()
+    model_id = rest[slash + 1:].strip()
+    if not name or not model_id:
+        return None
+    if custom_providers is None:
+        try:
+            from hermes_cli.config import get_compatible_custom_providers
+            custom_providers = get_compatible_custom_providers()
+        except Exception:
+            return None
+    if not isinstance(custom_providers, list):
+        return None
+    for entry in custom_providers:
+        if not isinstance(entry, dict):
+            continue
+        entry_keys = {
+            str(entry.get("name", "") or "").strip().lower(),
+            str(entry.get("provider_key", "") or "").strip().lower(),
+        }
+        if name in entry_keys:
+            return (f"custom:{name}", model_id)
+    # Also accept the slug ids the /model picker exposes (custom_provider_slug
+    # normalises spaces etc.), so ``custom:Local (127.0.0.1:4141)/model`` style
+    # specs keep working.
+    try:
+        configured = _configured_custom_provider_ids() - {"custom"}
+        if f"custom:{name}" in configured:
+            return (f"custom:{name}", model_id)
+    except Exception:
+        pass
+    return None
+
+
 def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
     """Parse ``/model`` input into ``(provider, model)``.
 
@@ -2188,6 +2242,10 @@ def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
                 actual_model = model_part[second_colon + 1:].strip()
                 if custom_name and actual_model:
                     return (f"custom:{custom_name}", actual_model)
+            if provider_part == "custom" and "/" in model_part:
+                spec = split_custom_provider_model_spec(stripped)
+                if spec is not None:
+                    return spec
             return (normalize_provider(provider_part), model_part)
     return (current_provider, stripped)
 
@@ -2373,6 +2431,17 @@ def detect_static_provider_for_model(
     name = (model_name or "").strip()
     if not name:
         return None
+
+    # --- Step -1: explicit custom:<provider>/<model> spec ---
+    # A fully-qualified custom-provider model path (e.g.
+    # ``custom:midagent/glm-53-fp8-mi325-max``) declares its own target
+    # provider, so resolve it before the custom-current-provider guard
+    # below can skip it (#48305 keeps bare catalog names from hijacking
+    # a custom endpoint; an explicit spec is the user saying exactly
+    # where the model lives).
+    custom_spec = split_custom_provider_model_spec(name)
+    if custom_spec is not None:
+        return custom_spec
 
     name_lower = name.lower()
     current_keys = _provider_keys(current_provider)
