@@ -1422,7 +1422,7 @@ def normalize_usage(
         # "reasoning_tokens") inside output_tokens_details. Map it so
         # reasoning/thinking spend is visible in session accounting and
         # observability plugins.
-        reasoning_tokens = _usage_count(_usage_get(output_details, "thinking_tokens", 0))
+        reasoning_tokens = _to_int(getattr(output_details, "thinking_tokens", 0) or 0)
 
     # Cache observability for MiniMax's Anthropic wire: on MiniMax-M3,
     # usage.cache_read_input_tokens carries a constant +128 floor and
