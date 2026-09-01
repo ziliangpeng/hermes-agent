@@ -2160,15 +2160,27 @@ def split_custom_provider_model_spec(
     spec: str,
     custom_providers: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[tuple[str, str]]:
-    """Split a ``custom:<provider-name>/<model-id>`` spec into its parts.
+    """Split a ``custom:<provider>/<model-id>`` scoped spec into its parts.
 
     Returns ``(provider, model_id)`` — e.g.
     ``custom:midagent/glm-53-fp8-mi325-max`` →
     ``("custom:midagent", "glm-53-fp8-mi325-max")`` — or ``None`` when the
-    spec is not a custom-provider-scoped model path. ``<provider-name>`` must
-    match a configured ``custom_providers`` entry (its ``name`` or
-    ``provider_key``, case-insensitive) so OpenRouter-style ``vendor/model``
-    ids passed to the bare custom endpoint are never misparsed.
+    spec is not a scoped model path for a *configured* custom provider.
+
+    Matching is case-insensitive against each configured entry's display
+    name, ``provider_key``, and picker slug, so ``custom:Local Proxy/model``
+    and ``custom:local-proxy/model`` both resolve. The returned provider is
+    always the canonical slug (``custom_provider_slug``), never the raw
+    user input. OpenRouter-style ``vendor/model`` ids passed to the bare
+    custom endpoint are never misparsed: ``vendor`` must match a configured
+    provider name.
+
+    Reserved syntax: ``custom:<configured-provider>/<model>`` is treated as
+    a scoped spec at every model-selection entry point (``-m``,
+    ``HERMES_INFERENCE_MODEL``, ``/model``). A custom endpoint that
+    literally serves a model id of this shape can still select it verbatim
+    by passing an explicit ``--provider`` — explicit providers skip spec
+    detection entirely.
     """
     text = (spec or "").strip()
     if not text.lower().startswith("custom:"):
@@ -2186,27 +2198,39 @@ def split_custom_provider_model_spec(
             from hermes_cli.config import get_compatible_custom_providers
             custom_providers = get_compatible_custom_providers()
         except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "split_custom_provider_model_spec: custom provider config "
+                "failed to load; treating %r as a literal model id",
+                text,
+            )
             return None
     if not isinstance(custom_providers, list):
         return None
+    from hermes_cli.providers import custom_provider_slug
+
     for entry in custom_providers:
         if not isinstance(entry, dict):
             continue
-        entry_keys = {
-            str(entry.get("name", "") or "").strip().lower(),
-            str(entry.get("provider_key", "") or "").strip().lower(),
-        }
-        if name in entry_keys:
-            return (f"custom:{name}", model_id)
-    # Also accept the slug ids the /model picker exposes (custom_provider_slug
-    # normalises spaces etc.), so ``custom:Local (127.0.0.1:4141)/model`` style
-    # specs keep working.
-    try:
-        configured = _configured_custom_provider_ids() - {"custom"}
-        if f"custom:{name}" in configured:
-            return (f"custom:{name}", model_id)
-    except Exception:
-        pass
+        display_name = str(entry.get("name", "") or "").strip()
+        provider_key = str(entry.get("provider_key", "") or "").strip()
+        if not display_name and not provider_key:
+            continue
+        canonical = (
+            custom_provider_slug(display_name)
+            if display_name
+            else f"custom:{provider_key.lower()}"
+        )
+        slug_tail = (
+            canonical[len("custom:"):].lower()
+            if canonical.lower().startswith("custom:")
+            else canonical.lower()
+        )
+        candidates = {display_name.lower(), provider_key.lower(), slug_tail}
+        candidates.discard("")
+        if name in candidates:
+            return (canonical, model_id)
     return None
 
 
@@ -2233,19 +2257,28 @@ def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
         provider_part = stripped[:colon].strip().lower()
         model_part = stripped[colon + 1:].strip()
         if provider_part and model_part and provider_part in _KNOWN_PROVIDER_NAMES:
-            # Support custom:name:model triple syntax for named custom
-            # providers.  ``custom:local:qwen`` → ("custom:local", "qwen").
-            # Single colon ``custom:qwen`` → ("custom", "qwen") as before.
-            if provider_part == "custom" and ":" in model_part:
-                second_colon = model_part.find(":")
-                custom_name = model_part[:second_colon].strip()
-                actual_model = model_part[second_colon + 1:].strip()
-                if custom_name and actual_model:
-                    return (f"custom:{custom_name}", actual_model)
-            if provider_part == "custom" and "/" in model_part:
-                spec = split_custom_provider_model_spec(stripped)
-                if spec is not None:
-                    return spec
+            if provider_part == "custom":
+                # Scoped spec first: ``custom:<provider>/<model>`` where
+                # <provider> is configured. Splitting on the FIRST slash
+                # keeps later slashes and colons inside the model id intact
+                # (``custom:midagent/org/model:beta`` → ("custom:midagent",
+                # "org/model:beta")).
+                if "/" in model_part:
+                    spec = split_custom_provider_model_spec(stripped)
+                    if spec is not None:
+                        return spec
+                # Triple-colon syntax ``custom:local:qwen`` →
+                # ("custom:local", "qwen"). Only applies when the second
+                # colon comes before any slash — a colon after a slash is
+                # part of the model id (``custom:midagent/org/model:beta``
+                # must never parse as provider "midagent/org/model").
+                if ":" in model_part:
+                    second_colon = model_part.find(":")
+                    if "/" not in model_part[:second_colon]:
+                        custom_name = model_part[:second_colon].strip()
+                        actual_model = model_part[second_colon + 1:].strip()
+                        if custom_name and actual_model:
+                            return (f"custom:{custom_name}", actual_model)
             return (normalize_provider(provider_part), model_part)
     return (current_provider, stripped)
 
