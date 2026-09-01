@@ -310,7 +310,7 @@ class TestSlashNamedProviders:
             "hermes_cli.config.get_compatible_custom_providers",
             lambda *_a, **_kw: providers,
         )
-        # Scoped: model id goes to the slash-named provider "foo/bar"
+        # Scoped: the slash spec routes to provider "foo", model id "bar:qwen"
         assert parse_model_input("custom:foo/bar:qwen", "openai") == ("custom:foo", "bar:qwen")
 
 
