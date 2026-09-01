@@ -2156,42 +2156,20 @@ def list_available_providers() -> list[dict[str, str]]:
     return result
 
 
-def split_custom_provider_model_spec(
-    spec: str,
+def _configured_custom_provider_canonical(
+    name: str,
     custom_providers: Optional[List[Dict[str, Any]]] = None,
-) -> Optional[tuple[str, str]]:
-    """Split a ``custom:<provider>/<model-id>`` scoped spec into its parts.
+) -> Optional[str]:
+    """Return the canonical custom-provider slug for a configured name.
 
-    Returns ``(provider, model_id)`` — e.g.
-    ``custom:midagent/glm-53-fp8-mi325-max`` →
-    ``("custom:midagent", "glm-53-fp8-mi325-max")`` — or ``None`` when the
-    spec is not a scoped model path for a *configured* custom provider.
-
-    Matching is case-insensitive against each configured entry's display
-    name, ``provider_key``, and picker slug, so ``custom:Local Proxy/model``
-    and ``custom:local-proxy/model`` both resolve. The returned provider is
-    always the canonical slug (``custom_provider_slug``), never the raw
-    user input. OpenRouter-style ``vendor/model`` ids passed to the bare
-    custom endpoint are never misparsed: ``vendor`` must match a configured
-    provider name.
-
-    Reserved syntax: ``custom:<configured-provider>/<model>`` is treated as
-    a scoped spec at every model-selection entry point (``-m``,
-    ``HERMES_INFERENCE_MODEL``, ``/model``). A custom endpoint that
-    literally serves a model id of this shape can still select it verbatim
-    by passing an explicit ``--provider`` — explicit providers skip spec
-    detection entirely.
+    Matches case-insensitively against each configured entry's display
+    name, ``provider_key``, and picker slug, so ``Local Proxy`` and
+    ``local-proxy`` both resolve. Returns the canonical slug
+    (``custom_provider_slug``), never the raw input, or ``None`` when no
+    configured provider matches.
     """
-    text = (spec or "").strip()
-    if not text.lower().startswith("custom:"):
-        return None
-    rest = text[len("custom:"):]
-    slash = rest.find("/")
-    if slash <= 0 or slash == len(rest) - 1:
-        return None
-    name = rest[:slash].strip().lower()
-    model_id = rest[slash + 1:].strip()
-    if not name or not model_id:
+    name = (name or "").strip().lower()
+    if not name:
         return None
     if custom_providers is None:
         try:
@@ -2201,9 +2179,9 @@ def split_custom_provider_model_spec(
             import logging
 
             logging.getLogger(__name__).warning(
-                "split_custom_provider_model_spec: custom provider config "
-                "failed to load; treating %r as a literal model id",
-                text,
+                "custom provider config failed to load; treating %r as a "
+                "literal model id",
+                name,
             )
             return None
     if not isinstance(custom_providers, list):
@@ -2230,7 +2208,47 @@ def split_custom_provider_model_spec(
         candidates = {display_name.lower(), provider_key.lower(), slug_tail}
         candidates.discard("")
         if name in candidates:
-            return (canonical, model_id)
+            return canonical
+    return None
+
+
+def split_custom_provider_model_spec(
+    spec: str,
+    custom_providers: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[tuple[str, str]]:
+    """Split a ``custom:<provider>/<model-id>`` scoped spec into its parts.
+
+    Returns ``(provider, model_id)`` — e.g.
+    ``custom:midagent/glm-53-fp8-mi325-max`` →
+    ``("custom:midagent", "glm-53-fp8-mi325-max")`` — or ``None`` when the
+    spec is not a scoped model path for a *configured* custom provider.
+
+    The returned provider is always the canonical slug
+    (``_configured_custom_provider_canonical``), never the raw user input.
+    OpenRouter-style ``vendor/model`` ids passed to the bare custom endpoint
+    are never misparsed: ``vendor`` must match a configured provider name.
+
+    Reserved syntax: ``custom:<configured-provider>/<model>`` is treated as
+    a scoped spec at every model-selection entry point (``-m``,
+    ``HERMES_INFERENCE_MODEL``, ``/model``). A custom endpoint that
+    literally serves a model id of this shape can still select it verbatim
+    by passing an explicit ``--provider`` — explicit providers skip spec
+    detection entirely.
+    """
+    text = (spec or "").strip()
+    if not text.lower().startswith("custom:"):
+        return None
+    rest = text[len("custom:"):]
+    slash = rest.find("/")
+    if slash <= 0 or slash == len(rest) - 1:
+        return None
+    name = rest[:slash].strip()
+    model_id = rest[slash + 1:].strip()
+    if not name or not model_id:
+        return None
+    canonical = _configured_custom_provider_canonical(name, custom_providers)
+    if canonical is not None:
+        return (canonical, model_id)
     return None
 
 
@@ -2268,17 +2286,22 @@ def parse_model_input(raw: str, current_provider: str) -> tuple[str, str]:
                     if spec is not None:
                         return spec
                 # Triple-colon syntax ``custom:local:qwen`` →
-                # ("custom:local", "qwen"). Only applies when the second
-                # colon comes before any slash — a colon after a slash is
-                # part of the model id (``custom:midagent/org/model:beta``
-                # must never parse as provider "midagent/org/model").
+                # ("custom:local", "qwen"). Applies when the second colon
+                # comes before any slash. A colon AFTER a slash is part of
+                # the model id — unless the whole prefix up to that colon is
+                # itself a configured provider name (legacy slash-named
+                # providers: ``custom:foo/bar:qwen`` with a provider named
+                # ``foo/bar`` must keep resolving to that provider).
                 if ":" in model_part:
                     second_colon = model_part.find(":")
-                    if "/" not in model_part[:second_colon]:
-                        custom_name = model_part[:second_colon].strip()
-                        actual_model = model_part[second_colon + 1:].strip()
-                        if custom_name and actual_model:
+                    custom_name = model_part[:second_colon].strip()
+                    actual_model = model_part[second_colon + 1:].strip()
+                    if custom_name and actual_model:
+                        if "/" not in model_part[:second_colon]:
                             return (f"custom:{custom_name}", actual_model)
+                        canonical = _configured_custom_provider_canonical(custom_name)
+                        if canonical is not None:
+                            return (canonical, actual_model)
             return (normalize_provider(provider_part), model_part)
     return (current_provider, stripped)
 

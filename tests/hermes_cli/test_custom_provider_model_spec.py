@@ -272,3 +272,150 @@ class TestTuiStartupResolution:
         model, provider = _resolve_startup_runtime()
         assert model == "custom:midagent/literal-id"
         assert provider == "custom:other-endpoint"
+
+
+class TestSlashNamedProviders:
+    """Providers whose display name itself contains a slash (legacy
+    addressable via the colon triple) must keep working."""
+
+    @pytest.fixture
+    def _slash_providers(self, monkeypatch):
+        providers = [
+            {"name": "foo/bar", "base_url": "http://x/v1"},
+        ]
+        monkeypatch.setattr(
+            "hermes_cli.config.get_compatible_custom_providers",
+            lambda *_a, **_kw: providers,
+        )
+        return providers
+
+    def test_colon_triple_resolves_slash_named_provider(self, _slash_providers):
+        """custom:foo/bar:qwen with a provider literally named foo/bar."""
+        assert parse_model_input("custom:foo/bar:qwen", "openai") == ("custom:foo/bar", "qwen")
+
+    def test_unconfigured_slash_prefix_keeps_model_verbatim(self, monkeypatch):
+        monkeypatch.setattr(
+            "hermes_cli.config.get_compatible_custom_providers", lambda *_a, **_kw: []
+        )
+        assert parse_model_input("custom:foo/bar:qwen", "openai") == ("custom", "foo/bar:qwen")
+
+    def test_scoped_spec_wins_when_both_prefixes_configured(self, monkeypatch):
+        """With both foo and foo/bar configured, the scoped slash spec
+        (custom:foo/...) takes precedence over the slash-named colon form."""
+        providers = [
+            {"name": "foo", "base_url": "http://a/v1"},
+            {"name": "foo/bar", "base_url": "http://x/v1"},
+        ]
+        monkeypatch.setattr(
+            "hermes_cli.config.get_compatible_custom_providers",
+            lambda *_a, **_kw: providers,
+        )
+        # Scoped: model id goes to the slash-named provider "foo/bar"
+        assert parse_model_input("custom:foo/bar:qwen", "openai") == ("custom:foo", "bar:qwen")
+
+
+class _RecordingAgent:
+    """Minimal AIAgent stand-in: records constructor kwargs only."""
+
+    init_kwargs: dict = {}
+
+    def __init__(self, **kwargs):
+        type(self).init_kwargs = dict(kwargs)
+
+    def run_conversation(self, prompt):
+        return {"final_response": "ok"}
+
+    def shutdown_memory_provider(self, *_a, **_kw):
+        pass
+
+    def close(self):
+        pass
+
+
+class TestOneshotIntegration:
+    """End-to-end through the real oneshot entry path (``hermes -z -m ...``),
+    with only the AIAgent boundary replaced by a recorder. This is the path
+    the original bug lived in: the spec must be split before the agent is
+    constructed."""
+
+    @pytest.fixture
+    def _oneshot_env(self, monkeypatch, tmp_path):
+        """Hermetic oneshot environment: a temp HERMES_HOME with a real
+        config.yaml, so every layer (load_config, load_config_readonly cache,
+        resolve_runtime_provider) reads the fixture config from disk instead
+        of sharing process-global config caches with other tests."""
+        import os as _os
+
+        import hermes_cli.oneshot as oneshot_mod
+
+        (tmp_path / "config.yaml").write_text(
+            "custom_providers:\n"
+            "  - name: midagent\n"
+            "    base_url: http://localhost:19418/v1\n"
+            "    key_env: VLLM_API_KEY\n"
+            "    models:\n"
+            "      glm-53-fp8-mi325-max: {}\n"
+            "      glm-53-flash-fp8-mi350-max: {}\n"
+            "model:\n"
+            "  provider: custom:midagent\n"
+            "  base_url: http://localhost:19418/v1\n"
+            "  default: glm-53-flash-fp8-mi350\n"
+            "  aliases:\n"
+            "    glm53max: custom:midagent/glm-53-fp8-mi325-max\n"
+            "    glm53fmax: custom:midagent/glm-53-flash-fp8-mi350-max\n"
+        )
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        monkeypatch.setattr(oneshot_mod, "_create_session_db_for_oneshot", lambda: None)
+        monkeypatch.setattr(oneshot_mod, "get_fallback_chain", lambda cfg: [])
+        monkeypatch.setattr("run_agent.AIAgent", _RecordingAgent)
+        monkeypatch.setattr(
+            "hermes_cli.tools_config._get_platform_tools", lambda cfg, platform: []
+        )
+        saved_env = {
+            k: _os.environ.get(k)
+            for k in ("HERMES_YOLO_MODE", "HERMES_ACCEPT_HOOKS")
+        }
+        yield oneshot_mod
+        for key, value in saved_env.items():
+            if value is None:
+                _os.environ.pop(key, None)
+            else:
+                _os.environ[key] = value
+
+    def test_m_spec_splits_before_agent_construction(self, _oneshot_env):
+        import logging as _logging
+
+        try:
+            _oneshot_env.run_oneshot(
+                "hi",
+                model="custom:midagent/glm-53-fp8-mi325-max",
+                toolsets=[],
+            )
+        finally:
+            # run_oneshot silences logging process-wide; undo it for the
+            # rest of the test session.
+            _logging.disable(_logging.NOTSET)
+        kwargs = _RecordingAgent.init_kwargs
+        assert kwargs["model"] == "glm-53-fp8-mi325-max", kwargs
+        assert kwargs["base_url"] == "http://localhost:19418/v1", kwargs
+        # resolve_runtime_provider reports named custom endpoints with the
+        # generic runtime label "custom" plus the explicit requested id.
+        assert kwargs["requested_provider"] == "custom:midagent", kwargs
+        assert kwargs["provider"] in {"custom", "custom:midagent"}, kwargs
+
+    def test_explicit_provider_keeps_model_verbatim(self, _oneshot_env):
+        import logging as _logging
+
+        try:
+            _oneshot_env.run_oneshot(
+                "hi",
+                model="custom:midagent/literal-id",
+                provider="custom:midagent",
+                toolsets=[],
+            )
+        finally:
+            _logging.disable(_logging.NOTSET)
+        kwargs = _RecordingAgent.init_kwargs
+        assert kwargs["model"] == "custom:midagent/literal-id", kwargs
+        assert kwargs["requested_provider"] == "custom:midagent", kwargs
+        assert kwargs["base_url"] == "http://localhost:19418/v1", kwargs
