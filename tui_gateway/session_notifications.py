@@ -491,7 +491,9 @@ def _notif_handle_ready(sid, session, events, emitted, registry, fmt, deferred, 
 
 def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
     """Run one durable envelope only after local FIFO/continuations yield the idle boundary."""
-    from tools.bot_live_delivery import claim_pending_delivery, complete_delivery, find_canonical_live_owner
+    from tools.bot_live_delivery import (
+        claim_pending_delivery, complete_delivery, find_canonical_live_owner, repair_dead_letters,
+    )
 
     home = _session_home(session)
     with session["history_lock"]:
@@ -507,6 +509,16 @@ def _poll_bot_live_delivery_once(sid: str, session: dict) -> bool:
                 or owner.get("live_session_id") != sid
                 or owner.get("session_id") != session.get("session_key")):
             return False
+        # Dead-letter repair: envelopes queued for a lease that no longer exists
+        # are orphaned and re-admitted to THIS live owner, so the message is
+        # delivered instead of dying with the window that was open at send time.
+        try:
+            repair_dead_letters(home, owner)
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Dead-letter repair sweep failed", exc_info=True)
         # The mailbox matches each envelope to this pinned lease/live id and compression lineage.
         claimed = claim_pending_delivery(home, owner)
         if claimed is None:

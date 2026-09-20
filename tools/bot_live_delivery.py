@@ -8,6 +8,7 @@ not permission to execute the same input again. Receipts are permanent.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import tempfile
@@ -19,9 +20,17 @@ from typing import Any
 
 from hermes_cli.active_sessions import _FileLock
 
+log = logging.getLogger(__name__)
+
 DELIVERY_DIR_NAME = "bot_live_delivery"
 _OWNER_KEYS = ("profile_home", "session_id", "lease_id", "live_session_id")
-_TERMINAL = frozenset({"settled", "failed", "cancelled", "ambiguous"})
+_TERMINAL = frozenset({"settled", "failed", "cancelled", "ambiguous", "orphaned", "re-admitted"})
+
+# Prefix marking a re-admitted dead letter so the recipient can tell a repaired
+# delivery from a live one; the original sender attribution is inside the message.
+_REDELIVERY_NOTE = ("[delivery repair] This message was queued earlier but its recipient "
+                    "window closed before delivery, so it was never received; it is now "
+                    "redelivered verbatim.\n\n")
 
 
 def find_canonical_live_owner(profile_home: Path | str) -> dict[str, Any] | None:
@@ -191,6 +200,139 @@ def claim_pending_delivery(
         record.update(status="claimed", claimed_at=time.time_ns())
         _write(root / f"{record['delivery_id']}.json", record)
         return record
+
+
+def orphan_dead_letter_deliveries(
+    profile_home: Path | str, live_lease_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Mark queued envelopes whose pinned lease no longer exists as ``orphaned``.
+
+    A queued envelope is pinned to the exact lease/live-session that held the
+    target's canonical Bot Chat at admission time; that lease dies whenever its
+    window closes (a new lease NEVER matches the pin, by design). Nothing in the
+    base design ever retires such an envelope — it stays ``queued`` forever and
+    the message is silently lost (fleet evidence 2026-09-20: ls-dc envelope
+    0fc36421 queued 2026-09-17 was never delivered). This sweeper makes the loss
+    VISIBLE and terminal instead: an envelope whose pinned lease_id is absent
+    from the live registry (and was never claimed) becomes ``orphaned`` with the
+    original message preserved in the permanent receipt, so a supervisor can
+    redeliver it and audits can reconstruct what was lost.
+
+    ``live_lease_ids`` is the set of lease ids currently holding ANY session in
+    the profile registry; envelopes pinned to a lease not in that set are dead.
+    Idempotent: already-terminal envelopes (including previously orphaned ones)
+    are never touched.
+    """
+    home = Path(profile_home).resolve()
+    if not _root(home).is_dir():
+        return []
+    orphaned: list[dict[str, Any]] = []
+    with _locked(home) as root:
+        for path in root.glob("*.json"):
+            record = _read(path)
+            if record is None or record["status"] != "queued":
+                continue
+            pinned = record.get("owner") or {}
+            if pinned.get("lease_id") in live_lease_ids:
+                continue  # its consumer may still come back for it
+            record.update(status="orphaned",
+                          orphaned_at=time.time_ns(),
+                          reason="dead_letter_pinned_lease_gone")
+            _write(path, record)
+            orphaned.append(record)
+    return orphaned
+
+
+def readmit_orphaned_deliveries(
+    profile_home: Path | str, owner: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Re-admit orphaned envelopes to the CURRENT live owner of the same Bot Chat.
+
+    The repair half of the dead-letter sweeper: after ``orphan_dead_letter_deliveries``
+    retired an envelope pinned to a dead lease, the next capable live owner of the
+    SAME canonical Bot Chat (same session, or its compression descendant) gets a
+    fresh envelope carrying the original message (with a repair note prefix so the
+    recipient knows it is a redelivery). The orphaned receipt stays terminal and
+    immutable for audit; the fresh envelope follows the normal queued->claimed->
+    settled path against the CURRENT owner, so it is delivered exactly once even if
+    this owner also disappears (the sweeper will orphan it again, and the NEXT
+    owner re-admits it).
+    """
+    home = Path(profile_home).resolve()
+    current = _owner(home, owner)
+    if not _root(home).is_dir():
+        return []
+    readmitted: list[dict[str, Any]] = []
+    with _locked(home) as root:
+        for path in root.glob("*.json"):
+            record = _read(path)
+            if record is None or record["status"] != "orphaned":
+                continue
+            stored = record.get("owner") or {}
+            if stored.get("session_id") != current["session_id"] and not _same_lineage(
+                    home, stored.get("session_id"), current["session_id"]):
+                continue  # not this Bot Chat lineage — a renamed/migrated chat is not ours to repair
+            message = _REDELIVERY_NOTE + str(record.get("message") or "")
+            fresh = dict(delivery_id=uuid.uuid4().hex, id=uuid.uuid4().hex,
+                         owner=current, **current,
+                         message=message, status="queued", created_at=time.time_ns(),
+                         sequence=record.get("sequence", record.get("created_at", 0)),
+                         author=record.get("author") or {})
+            fresh["delivery_id"] = fresh["id"]
+            _write(root / f"{fresh['id']}.json", fresh)
+            record.update(status="re-admitted", readmitted_as=fresh["id"],
+                          readmitted_at=time.time_ns())
+            _write(path, record)
+            readmitted.append(fresh)
+    return readmitted
+
+
+def _same_lineage(home: Path, stored_session: str | None, current_session: str) -> bool:
+    """Whether the stored session is an ancestor of (or equals) the current session
+    via the compression chain (tip lookup), i.e. the SAME conversation."""
+    if not stored_session:
+        return False
+    if stored_session == current_session:
+        return True
+    from hermes_state import SessionDB
+
+    db = SessionDB(db_path=home / "state.db", read_only=True)
+    try:
+        return db.get_compression_tip(stored_session) == current_session
+    finally:
+        db.close()
+
+
+def repair_dead_letters(profile_home: Path | str, owner: dict[str, Any]) -> list[dict[str, Any]]:
+    """One poller-friendly sweep: orphan dead letters, then re-admit them to ``owner``.
+
+    Cheap short-circuit for the common case (the poller calls this at its normal
+    cadence): if no queued envelope exists that ``owner`` cannot claim, nothing
+    happens and the live-registry snapshot (the expensive part — a cross-process
+    lock) is skipped. Only when a queued envelope exists that ``owner`` CANNOT
+    claim (the dead-letter signature: its pinned lease differs) are the registry
+    consulted and the orphan/re-admit primitives run.
+    """
+    home = Path(profile_home).resolve()
+    if not _root(home).is_dir():
+        return []
+    current = _owner(home, owner)
+    with _locked(home) as root:
+        unclaimable = [record for path in root.glob("*.json")
+                       if (record := _read(path)) is not None
+                       and record["status"] == "queued"
+                       and not _matches(home, record, current)]
+    if not unclaimable:
+        return []  # nothing queued, or it is all ours — claim_pending_delivery will take it
+    from hermes_cli.active_sessions import active_session_registry_snapshot
+
+    live_leases = {str(entry["lease_id"]) for entry
+                   in active_session_registry_snapshot(registry_home=home)
+                   if isinstance(entry.get("lease_id"), str) and entry["lease_id"]}
+    orphan_dead_letter_deliveries(home, live_leases)
+    return readmit_orphaned_deliveries(home, current)
+
+
 
 
 def complete_delivery(
