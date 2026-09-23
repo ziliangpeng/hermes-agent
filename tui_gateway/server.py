@@ -1972,6 +1972,39 @@ def _get_usage(agent) -> dict:
         from agent.context_breakdown import context_usage_fields
         usage.update(context_usage_fields(comp))
         usage["compressions"] = getattr(comp, "compression_count", 0) or 0
+        # Compression trigger point (threshold_tokens = context_length × threshold_percent).
+        # The status bar's compact context read-out uses this as its denominator so the
+        # percentage reflects distance-to-compression, not distance-to-the-model hard cap.
+        with contextlib.suppress(Exception):
+            _threshold = int(getattr(comp, "threshold_tokens", 0) or 0)
+            if _threshold > 0:
+                usage["context_threshold_tokens"] = _threshold
+    # Memory / user-profile / skills context occupancy (compact status-bar segment).
+    # Same source the /context breakdown uses; omitted (not fabricated) when the agent
+    # has no memory store or no data yet. Cheap: category tokens are already computed
+    # by compute_session_context_breakdown — here we only read the store blocks.
+    with contextlib.suppress(Exception):
+        from agent.context_breakdown import _memory_blocks, _chars_to_tokens
+        memory_block, user_block = _memory_blocks(agent)
+        if memory_block:
+            usage["memory_tokens"] = _chars_to_tokens(memory_block)
+        if user_block:
+            usage["user_tokens"] = _chars_to_tokens(user_block)
+    # Skill count from the live skills index block of the system prompt — the same
+    # list the model sees, so disabled/hidden skills are not counted.
+    with contextlib.suppress(Exception):
+        import re as _re
+        _skills_m = _re.search(
+            r"<available_skills>(.*?)</available_skills>", getattr(agent, "_cached_system_prompt", "") or "", _re.DOTALL
+        )
+        if _skills_m:
+            _names = [
+                ln.strip().lstrip("- ").split(":", 1)[0].strip()
+                for ln in _skills_m.group(1).splitlines()
+                if ln.strip().startswith(("-", "•", "*"))
+            ]
+            if _names:
+                usage["skill_count"] = len(_names)
     # Cache-hit ratio + rolling latency/tps (CLI status-bar parity). Omitted, not fabricated, when there is no
     # data (Codex reports no latency; zero cache reads shows no hit% rather than an alarming 0).
     with contextlib.suppress(Exception):
