@@ -28,6 +28,12 @@ class Usage(OpenModel):
     compressions: int | None = None
     context_used: int | None = None
     context_max: int | None = None
+    # Compact status-bar (#49): threshold the ContextCompressor actually fires
+    # at (context bar % denominator), plus memory/user/skills occupancy.
+    context_threshold_tokens: int | None = None
+    memory_tokens: int | None = None
+    user_tokens: int | None = None
+    skill_count: int | None = None
     context_percent: int | None = None
     context_source: str | None = None
     context_estimated: bool | None = None

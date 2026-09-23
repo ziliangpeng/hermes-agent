@@ -11,7 +11,6 @@ import { $isStatusRuleOccluded } from '../app/overlayStore.js'
 import { useTurnSelector } from '../app/turnStore.js'
 import { DEV_CREDITS_MODE } from '../config/env.js'
 import { FACES } from '../content/faces.js'
-import { VERBS } from '../content/verbs.js'
 import { fmtDuration } from '../domain/messages.js'
 import { stickyPromptFromViewport } from '../domain/viewport.js'
 import { buildSubagentTree, treeTotals, widthByDepth } from '../lib/subagentTree.js'
@@ -26,8 +25,6 @@ const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
 
 // Keep verb segment width stable so status-bar content to the right doesn't
 // jitter when the ticker rotates between short/long verbs.
-export const VERB_PAD_LEN = VERBS.reduce((max, v) => Math.max(max, v.length), 0) + 1 // + ellipsis
-export const padVerb = (verb: string) => `${verb}…`.padEnd(VERB_PAD_LEN, ' ')
 
 // Compact alternates for the `emoji` and `ascii` indicator styles.
 // Each entry is a fixed-width (display-width) glyph.
@@ -112,12 +109,11 @@ export const MAX_DURATION_WIDTH = Math.max(
 // ascii add a fixed-width verb; any style adds a bounded elapsed-time tail.
 // Mirrors FaceTicker's `frame + verbSegment + durationSegment` layout.
 export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
-  const { showVerb } = renderIndicator(style, 0)
-  const verb = showVerb ? 1 + VERB_PAD_LEN : 0
-  // ` · ` plus the bounded clock (e.g. `59m 59s`).
-  const duration = hasDuration ? stringWidth(' · ') + MAX_DURATION_WIDTH : 0
+  // ` ` plus the bounded clock (e.g. `59m 59s`). The verb carousel is gone;
+  // a frozen override like `compacting` is short and bounded by the pad.
+  const duration = hasDuration ? stringWidth(' ') + MAX_DURATION_WIDTH : 0
 
-  return indicatorFrameWidth(style) + verb + duration
+  return indicatorFrameWidth(style) + duration
 }
 
 function FaceTicker({
@@ -132,7 +128,6 @@ function FaceTicker({
   verbOverride?: string
 }) {
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
-  const [verbTick, setVerbTick] = useState(() => Math.floor(Math.random() * VERBS.length))
   const [now, setNow] = useState(() => Date.now())
   const isOccluded = useStore($isStatusRuleOccluded)
 
@@ -141,9 +136,10 @@ function FaceTicker({
   // for verb-less styles like `unicode`) without leaving the previous
   // timer dangling. A frozen override (idle compaction) always shows the
   // verb so "compacting…" is visible even in unicode style (#97239).
-  const { intervalMs, showVerb } = renderIndicator(style, 0)
-  const freezeVerb = Boolean(verbOverride)
-  const displayVerb = freezeVerb || showVerb
+  // The decorative rotating-verb carousel is gone — the busy indicator shows
+  // its glyph + elapsed time, plus the `compacting` freeze when relevant.
+  const { intervalMs } = renderIndicator(style, 0)
+  const displayVerb = Boolean(verbOverride)
 
   useEffect(() => {
     // An overlay is painted OVER the status rule (the modal widget slot, or a
@@ -161,29 +157,18 @@ function FaceTicker({
 
     const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
     const clock = setInterval(() => setNow(Date.now()), 1000)
-    // Verb timer is gated on `displayVerb` — `unicode` style hides the verb
-    // entirely, so cycling `verbTick` would be an avoidable re-render. A
-    // frozen override does not rotate.
-    const verb = displayVerb && !freezeVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
 
     return () => {
       clearInterval(glyph)
       clearInterval(clock)
-
-      if (verb !== null) {
-        clearInterval(verb)
-      }
     }
-  }, [displayVerb, freezeVerb, intervalMs, isOccluded])
+  }, [intervalMs, isOccluded])
 
   const { frame } = renderIndicator(style, tick)
-  const verb = verbOverride ?? VERBS[verbTick % VERBS.length] ?? ''
-  const verbSegment = displayVerb ? ` ${padVerb(verb)}` : ''
-  // Leading space keeps a gap between the frame and the duration when the
-  // verb segment is hidden (e.g. `unicode` spinner style).  When the verb
-  // IS shown, its trailing padding already provides the gap, so the extra
-  // space is harmless.
-  const durationSegment = startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''
+  const verbSegment = displayVerb && verbOverride ? ` ${verbOverride}` : ''
+  // Leading space keeps a gap between the frame and the duration when no
+  // verb override is shown.
+  const durationSegment = startedAt ? ` ${fmtDuration(now - startedAt)}` : ''
 
   return (
     <Text color={color}>
@@ -271,6 +256,23 @@ function ctxBar(pct: number | undefined, w = 10) {
   const filled = Math.round((p / 100) * w)
 
   return '█'.repeat(filled) + '░'.repeat(w - filled)
+}
+
+// Compact 4-char half-block bar (8-level resolution). At least one cell stays
+// visible from 5% occupancy up; 0% renders all-empty. Same visual contract as
+// the fork's PR #30, applied to the threshold-relative percentage.
+export function compactCtxBar(pct: number): string {
+  const p = Math.max(0, Math.min(100, pct))
+  const eighths = p > 0 ? Math.max(1, Math.round((p / 100) * 8)) : 0
+  let out = ''
+
+  for (let i = 0; i < 4; i++) {
+    const cells = Math.max(0, Math.min(2, eighths - i * 2))
+
+    out += cells === 2 ? '█' : cells === 1 ? '▌' : '░'
+  }
+
+  return out
 }
 
 // `minLeftContent` is the display width of the high-priority left segments
@@ -503,6 +505,7 @@ export function StatusRule({
   busy,
   compacting = false,
   status,
+  statusBarCompact = false,
   statusBarFields = null,
   statusColor,
   model,
@@ -544,7 +547,24 @@ export function StatusRule({
           : ''
       : ''
 
-  const bar = !segs.compactCtx && usage.context_max && ok('context_pct') ? ctxBar(pct) : ''
+  // Compact mode: read occupancy against the COMPRESSION THRESHOLD, not the
+  // model's hard cap. `██░░ 78%` means "78% of the way to compression" — the
+  // number tracks the behaviour the user actually plans around. The absolute
+  // token count is dropped unless `context_detail` is on (same gate as the
+  // detail read-out above).
+  const thresholdPct =
+    usage.context_threshold_tokens && usage.context_used
+      ? Math.max(0, Math.min(100, Math.round((usage.context_used / usage.context_threshold_tokens) * 100)))
+      : undefined
+  const compactCtxLabel =
+    statusBarCompact && (ok('context_pct') || ok('context_detail'))
+      ? thresholdPct != null
+        ? `${compactCtxBar(thresholdPct)} ${thresholdPct}%${ok('context_detail') ? ` ${contextMark}${compactNumber(usage.context_used ?? 0)}` : ''}`
+        : ctxLabel
+      : ''
+  const compactCtxText = statusBarCompact ? compactCtxLabel || ctxLabel : ctxLabel
+
+  const bar = !segs.compactCtx && usage.context_max && ok('context_pct') && !statusBarCompact ? ctxBar(pct) : ''
   const modelText = modelLabel(model, modelReasoningEffort, modelFast, modelReasoningEffortWire)
 
   // Battery read-out — the first (pinned) status-bar element when enabled.
@@ -582,7 +602,7 @@ export function StatusRule({
     slotWidth +
     stringWidth(' │ ') +
     stringWidth(modelText) +
-    (ctxLabel ? stringWidth(' │ ') + stringWidth(ctxLabel) : 0)
+    (compactCtxText ? stringWidth(' │ ') + stringWidth(compactCtxText) : 0)
 
   const rightLabel = sessionTitle && ok('title') ? ` ${sessionTitle} ` : cwdLabel
   const { leftWidth, rightWidth, separatorWidth } = statusRuleWidths(cols, rightLabel, essentialWidth)
@@ -638,6 +658,36 @@ export function StatusRule({
   const showLatency = segs.latency && ok('latency') && !!latencyText && fits(SEP + stringWidth(latencyText))
   const tpsText = typeof usage.avg_tps === 'number' ? `↑ ${Math.round(usage.avg_tps)} t/s` : ''
   const showTps = segs.tps && ok('tps') && !!tpsText && fits(SEP + stringWidth(tpsText))
+
+  // Compact M%/U%/S segment — memory / user-profile occupancy of the context
+  // window (percent of context_threshold_tokens; falls back to context_max)
+  // and the live skill count. Self-hides per-part when there is nothing to
+  // show (no memory store, no skills) and obeys the `memory` fields gate.
+  const occupancyDenom = usage.context_threshold_tokens ?? usage.context_max
+  const memoryPct =
+    usage.memory_tokens != null && occupancyDenom
+      ? Math.max(0, Math.min(100, Math.round((usage.memory_tokens / occupancyDenom) * 100)))
+      : undefined
+  const userPct =
+    usage.user_tokens != null && occupancyDenom
+      ? Math.max(0, Math.min(100, Math.round((usage.user_tokens / occupancyDenom) * 100)))
+      : undefined
+  const musParts: string[] = []
+
+  if (memoryPct != null && memoryPct > 0) {
+    musParts.push(`M${memoryPct}`)
+  }
+
+  if (userPct != null && userPct > 0) {
+    musParts.push(`U${userPct}`)
+  }
+
+  if (usage.skill_count) {
+    musParts.push(`S${usage.skill_count}`)
+  }
+
+  const musText = statusBarCompact && musParts.length > 0 ? musParts.join(' ') : ''
+  const showMus = statusBarCompact && !!musText && ok('memory') && fits(SEP + stringWidth(musText))
 
   const showVoice = segs.voice && ok('voice') && !!voiceLabel && fits(SEP + stringWidth(voiceLabel))
   const showSessionCount = !!sessionCountText && fits(SEP + stringWidth(sessionCountText))
@@ -703,7 +753,7 @@ export function StatusRule({
             />
           ) : showNotice ? null : (
             <Text color={statusColor} wrap="truncate-end">
-              {status}
+              {statusBarCompact && status === 'ready' ? '◉' : status}
             </Text>
           )}
         </Box>
@@ -728,10 +778,14 @@ export function StatusRule({
             {' │ '}
             {modelText}
           </Text>
-          {ctxLabel ? (
+          {compactCtxText ? (
             <Text color={t.color.muted} wrap="truncate-end">
               {' │ '}
-              {ctxLabel}
+              {statusBarCompact && thresholdPct != null ? (
+                <Text color={barColor}>{compactCtxText}</Text>
+              ) : (
+                compactCtxText
+              )}
             </Text>
           ) : null}
         </Box>
@@ -794,6 +848,12 @@ export function StatusRule({
           <Text color={t.color.muted} wrap="truncate-end">
             {' │ '}
             {tpsText}
+          </Text>
+        ) : null}
+        {showMus ? (
+          <Text color={t.color.muted} wrap="truncate-end">
+            {' │ '}
+            {musText}
           </Text>
         ) : null}
         {showVoice ? (
@@ -966,6 +1026,8 @@ interface StatusRuleProps {
   sessionStartedAt?: null | number
   sessionTitle?: string
   status: string
+  // display.status_bar.compact — density-first rendering (see uiStore).
+  statusBarCompact?: boolean
   // display.status_bar.fields — segment visibility filter shared with the
   // classic CLI bar. null = defaults (everything shows).
   statusBarFields?: null | ReadonlySet<string>
