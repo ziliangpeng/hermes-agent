@@ -593,6 +593,10 @@ export interface Usage {
   compressions?: number | null
   context_used?: number | null
   context_max?: number | null
+  context_threshold_tokens?: number | null
+  memory_tokens?: number | null
+  user_tokens?: number | null
+  skill_count?: number | null
   context_percent?: number | null
   context_source?: string | null
   context_estimated?: boolean | null
@@ -3511,6 +3515,10 @@ export interface SessionUsageResult {
   compressions?: number | null
   context_used?: number | null
   context_max?: number | null
+  context_threshold_tokens?: number | null
+  memory_tokens?: number | null
+  user_tokens?: number | null
+  skill_count?: number | null
   context_percent?: number | null
   context_source?: string | null
   context_estimated?: boolean | null

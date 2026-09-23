@@ -131,7 +131,7 @@ export interface ConfigDisplayConfig {
   /** CLI/TUI status-bar field visibility filter (shared with the classic
    *  CLI bar — see display.status_bar.fields in configuration docs).
    *  Raw YAML: callers must runtime-validate entries. */
-  status_bar?: { fields?: unknown }
+  status_bar?: { compact?: boolean; fields?: unknown }
   streaming?: boolean
   thinking_mode?: string
   /** Show [HH:MM] timestamps on transcript rows — same key the classic CLI
@@ -308,14 +308,17 @@ export interface SessionUsageResponse {
   context_percent?: number
   context_estimated?: boolean
   context_source?: string
+  context_threshold_tokens?: number
   context_used?: number
   cost_status?: 'estimated' | 'exact'
   cost_usd?: number
   credits_lines?: string[]
   credits_usage_window?: boolean
   input?: number
+  memory_tokens?: number
   model?: string
   output?: number
+  skill_count?: number
   total?: number
   // Shared dollar usage model (two-bar view) so /usage renders the same bars
   // as /subscription. Dollars only — never "credits".
