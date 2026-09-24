@@ -252,52 +252,34 @@ def format_duration_compact(*args, **kwargs):
     return f"{days:.1f}d"
 
 
-# model id -> shortest configured alias (process-lifetime cache; config is read once).
-_REVERSE_ALIAS_CACHE: dict[str, str] | None = None
+# Config is read once per process; the reverse map is ranked per route provider (a
+# provider-prefixed alias from the route's own provider outranks shorter cross-provider
+# ones), so maps are memoized per provider. The transform itself lives in
+# hermes_cli.model_switch.reverse_alias_map (the alias topic owner), shared with the
+# gateway's model_alias wire field so the two cannot drift.
+_REVERSE_ALIAS_CFG: dict | None = None
+_REVERSE_ALIAS_CACHE: dict[str | None, dict[str, str]] = {}
 
 
-def _reverse_alias_map_from_config(cfg: dict) -> dict[str, str]:
-    """``model id -> shortest alias`` from ``model_aliases:`` + ``model.aliases:``.
+def _reverse_alias_for_display(model_name: str, provider: str | None = None) -> str:
+    """Shortest alias for ``model_name`` from ``model_aliases:`` or ``model.aliases:``, else ``model_name``.
 
-    Pure data transform (no I/O) shared by the CLI status bar and the gateway's
-    ``model_alias`` wire field, so the two can't drift on resolution rules. Shortest
-    alias wins; ``custom:provider/model`` values key the bare model id (that is what
-    ``agent.model`` holds after a switch resolves the route).
+    ``provider`` (the route's provider) makes aliases whose provider prefix matches it
+    outrank shorter ones from a different provider serving the same model id.
     """
-    rmap: dict[str, str] = {}
-
-    def _put(m: str, alias: str) -> None:
-        if m and (m not in rmap or len(alias) < len(rmap[m])):
-            rmap[m] = alias
-
-    ma = cfg.get("model_aliases")
-    if isinstance(ma, dict):
-        for alias, entry in ma.items():
-            if isinstance(entry, dict):
-                _put(str(entry.get("model", "") or "").strip(), alias)
-    mdl = cfg.get("model", {}) or {}
-    if isinstance(mdl, dict):
-        simple = mdl.get("aliases")
-        if isinstance(simple, dict):
-            for alias, val in simple.items():
-                if isinstance(val, str) and val.strip():
-                    v = val.strip()
-                    _put(v.split("/", 1)[1] if "/" in v else v, alias)
-    return rmap
-
-
-def _reverse_alias_for_display(model_name: str) -> str:
-    """Shortest alias for ``model_name`` from ``model_aliases:`` or ``model.aliases:``, else ``model_name``."""
-    global _REVERSE_ALIAS_CACHE
+    global _REVERSE_ALIAS_CFG
     if not model_name:
         return model_name
-    if _REVERSE_ALIAS_CACHE is None:
+    if _REVERSE_ALIAS_CFG is None:
         try:
             from hermes_cli.config import load_config
-            _REVERSE_ALIAS_CACHE = _reverse_alias_map_from_config(load_config() or {})
+            _REVERSE_ALIAS_CFG = load_config() or {}
         except Exception:
-            _REVERSE_ALIAS_CACHE = {}
-    return _REVERSE_ALIAS_CACHE.get(model_name, model_name)
+            _REVERSE_ALIAS_CFG = {}
+    if provider not in _REVERSE_ALIAS_CACHE:
+        from hermes_cli.model_switch import reverse_alias_map
+        _REVERSE_ALIAS_CACHE[provider] = reverse_alias_map(_REVERSE_ALIAS_CFG, provider)
+    return _REVERSE_ALIAS_CACHE[provider].get(model_name, model_name)
 
 
 def format_token_count_compact(*args, **kwargs):

@@ -4,9 +4,13 @@ Contract (issue #48): ``session.info`` carries the SHORTEST alias configured for
 session's resolved model in the SESSION-OWNING profile's config — display-only, never
 used to route. Verified behaviors, not snapshots:
 
-- ``model.aliases:`` entries alias the model id (``custom:provider/model`` values key
-  the bare model id, which is what ``agent.model`` holds after a switch resolves).
+- ``model.aliases:`` entries alias the model id (``custom:provider/model`` and
+  ``provider/model`` values key the bare model id, which is what ``agent.model`` holds
+  after a switch resolves).
 - ``model_aliases:`` dict entries participate too; shortest alias wins across both.
+- Provider-scoped ranking: when the route's provider is known, an alias whose provider
+  prefix matches it outranks a SHORTER alias from a different provider serving the same
+  model id — a staging endpoint must not lend its name to the production route.
 - No matching alias → ``""`` (clients fall back to their generic label), never the
   model id echoed back.
 - The lookup reads the SESSION-OWNING profile's config file, not the launch profile's:
@@ -19,11 +23,18 @@ from pathlib import Path
 from tui_gateway.server import _profile_reverse_alias
 
 
-def _write_profile(home: Path, aliases: dict) -> Path:
+def _write_profile(home: Path, aliases: dict, model_aliases: dict | None = None) -> Path:
     home.mkdir(parents=True, exist_ok=True)
     lines = ["model:", "  aliases:"]
     for name, target in aliases.items():
         lines.append(f"    {name}: {target}")
+    if model_aliases:
+        lines.append("model_aliases:")
+        for name, entry in model_aliases.items():
+            lines.append(f"  {name}:")
+            lines.append(f"    model: {entry['model']}")
+            if "provider" in entry:
+                lines.append(f"    provider: {entry['provider']}")
     (home / "config.yaml").write_text("\n".join(lines) + "\n")
     return home
 
@@ -42,15 +53,51 @@ class TestAliasResolution:
         assert _profile_reverse_alias(str(home), "model-x") == ""
 
     def test_model_aliases_dict_entries_count(self, tmp_path):
-        home = tmp_path
-        home.mkdir(parents=True, exist_ok=True)
-        (home / "config.yaml").write_text(
-            "model_aliases:\n  fromdict:\n    model: model-x\n    provider: custom\n"
-        )
+        home = _write_profile(tmp_path, {}, {"fromdict": {"model": "model-x", "provider": "custom"}})
         assert _profile_reverse_alias(str(home), "model-x") == "fromdict"
 
     def test_empty_model_name_returns_empty(self, tmp_path):
         assert _profile_reverse_alias(str(_write_profile(tmp_path, {"a": "model-x"})), "") == ""
+
+
+class TestProviderScoping:
+    @staticmethod
+    def _two_endpoint_profile(tmp_path):
+        home = tmp_path / "profile"
+        home.mkdir(parents=True)
+        (home / "config.yaml").write_text(
+            "model:\n"
+            "  aliases:\n"
+            "    staging: custom:staging/model-x\n"
+            "    prodname: custom:prod/model-x\n"
+        )
+        return home
+
+    def test_route_provider_outranks_shorter_cross_provider_alias(self, tmp_path):
+        # 'staging' (7 chars, custom:staging endpoint) would beat 'prodname' (8 chars,
+        # custom:prod) on length alone; with the route's provider known, the matching
+        # provider's alias must win.
+        home = self._two_endpoint_profile(tmp_path)
+        assert _profile_reverse_alias(str(home), "model-x", "custom:prod") == "prodname"
+        assert _profile_reverse_alias(str(home), "model-x", "custom:staging") == "staging"
+
+    def test_provider_unknown_falls_back_to_shortest(self, tmp_path):
+        home = self._two_endpoint_profile(tmp_path)
+        assert _profile_reverse_alias(str(home), "model-x") == "staging"
+        assert _profile_reverse_alias(str(home), "model-x", "custom:other") == "staging"
+        # The bare literal "custom" (agent.provider for named entries) cannot
+        # discriminate either — shortest-wins is the documented fallback.
+        assert _profile_reverse_alias(str(home), "model-x", "custom") == "staging"
+
+    def test_model_aliases_dict_provider_field_ranks(self, tmp_path):
+        home = _write_profile(
+            tmp_path,
+            {},
+            {"a": {"model": "model-x", "provider": "custom:staging"},
+             "b": {"model": "model-x", "provider": "custom:prod"}},
+        )
+        assert _profile_reverse_alias(str(home), "model-x", "custom:prod") == "b"
+        assert _profile_reverse_alias(str(home), "model-x", "custom:staging") == "a"
 
 
 class TestProfileIsolation:
