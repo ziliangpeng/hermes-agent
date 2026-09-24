@@ -25385,6 +25385,11 @@
             "title": "Model",
             "type": "string"
           },
+          "model_alias": {
+            "default": "",
+            "title": "Model Alias",
+            "type": "string"
+          },
           "provider": {
             "default": "",
             "title": "Provider",
@@ -26238,6 +26243,11 @@
           "model": {
             "default": "",
             "title": "Model",
+            "type": "string"
+          },
+          "model_alias": {
+            "default": "",
+            "title": "Model Alias",
             "type": "string"
           },
           "provider": {

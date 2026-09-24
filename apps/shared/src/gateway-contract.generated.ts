@@ -588,6 +588,7 @@ export interface ConfigSetResult {
 /** ``tui_gateway/server.py::_session_info`` — the ``session.info`` event and the ``info`` field of ``session.create`` / ``session.resume`` / ``session.activate`` results. */
 export interface SessionLiveInfo {
   model?: string
+  model_alias?: string
   provider?: string
   reasoning_effort?: string
   reasoning_effort_wire?: string
@@ -2717,6 +2718,7 @@ export interface SessionCwdSetParams {
 /** The refreshed ``session.info`` view (full agent view, or the lazy shape). */
 export interface SessionCwdSetResult {
   model?: string
+  model_alias?: string
   provider?: string
   reasoning_effort?: string
   reasoning_effort_wire?: string
