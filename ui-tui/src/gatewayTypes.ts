@@ -315,7 +315,6 @@ export interface SessionUsageResponse {
   credits_lines?: string[]
   credits_usage_window?: boolean
   input?: number
-  memory_tokens?: number
   model?: string
   output?: number
   skill_count?: number
