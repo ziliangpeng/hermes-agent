@@ -468,8 +468,8 @@ const shortModelLabel = (model: string) =>
     .replace(/\b(\d+)\s+(\d+)\b/g, '$1.$2')
     .trim()
 
-const modelLabel = (model: string, effort?: string, fast?: boolean, effortWire?: string) =>
-  [shortModelLabel(model), effortLabel(effort, effortWire), fast ? 'fast' : ''].filter(Boolean).join(' ')
+const modelLabel = (model: string, effort?: string, fast?: boolean, effortWire?: string, alias?: string) =>
+  [alias || shortModelLabel(model), effortLabel(effort, effortWire), fast ? 'fast' : ''].filter(Boolean).join(' ')
 
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
@@ -508,6 +508,7 @@ export function StatusRule({
   statusBarFields = null,
   statusColor,
   model,
+  modelAlias,
   modelFast,
   modelReasoningEffort,
   modelReasoningEffortWire,
@@ -564,7 +565,7 @@ export function StatusRule({
   const compactCtxText = statusBarCompact ? compactCtxLabel || ctxLabel : ctxLabel
 
   const bar = !segs.compactCtx && usage.context_max && ok('context_pct') && !statusBarCompact ? ctxBar(pct) : ''
-  const modelText = modelLabel(model, modelReasoningEffort, modelFast, modelReasoningEffortWire)
+  const modelText = modelLabel(model, modelReasoningEffort, modelFast, modelReasoningEffortWire, modelAlias)
 
   // Battery read-out — the first (pinned) status-bar element when enabled.
   const showBattery = !!battery && battery.available && battery.percent != null && ok('battery')
@@ -1018,6 +1019,9 @@ interface StatusRuleProps {
   cols: number
   cwdLabel: string
   model: string
+  // Display-only gateway alias for `model` (session.info model_alias; "" when the
+  // profile has none configured — falls back to the generic shortModelLabel).
+  modelAlias?: string
   modelFast?: boolean
   modelReasoningEffort?: string
   modelReasoningEffortWire?: string
