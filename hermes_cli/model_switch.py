@@ -196,6 +196,52 @@ def _clean(value: Any) -> str:
     """``str(value or "").strip()`` — the config-field normaliser used throughout this module."""
     return str(value or "").strip()
 
+
+def reverse_alias_map(cfg: dict, provider: str | None = None) -> dict[str, str]:
+    """``model id -> shortest alias`` from ``model_aliases:`` + ``model.aliases:`` — display-only.
+
+    Shared by the CLI status bar and the gateway's ``model_alias`` wire field so the
+    two cannot drift. Resolution rules:
+
+    - ``custom:provider/model`` and ``provider/model`` values key the bare model id,
+      which is what ``agent.model`` holds after a switch resolves the route.
+    - With ``provider`` (the route's provider as displayed to the user), a value whose
+      provider prefix matches it wins over one from a different provider, regardless of
+      length — two endpoints serving the same model id (``custom:prod`` /
+      ``custom:staging``) must not borrow each other's names.
+    - Otherwise shortest alias wins.
+    """
+    rmap: dict[str, str] = {}
+    ranked: dict[str, tuple[int, int]] = {}
+
+    def _put(m: str, alias: str, alias_provider: str | None = None) -> None:
+        # Rank: (provider match, alias length) — lower wins. A matching provider
+        # outranks a shorter cross-provider alias (hence the negated match), and among
+        # equals the shorter name wins.
+        pmatch = 1 if alias_provider and provider and alias_provider == provider else 0
+        rank = (-pmatch, len(alias))
+        if m and (m not in ranked or rank < ranked[m]):
+            ranked[m] = rank
+            rmap[m] = alias
+
+    ma = cfg.get("model_aliases")
+    if isinstance(ma, dict):
+        for alias, entry in ma.items():
+            if isinstance(entry, dict):
+                _put(str(entry.get("model", "") or "").strip(), alias,
+                     _clean(entry.get("provider")) or None)
+    mdl = cfg.get("model", {}) or {}
+    if isinstance(mdl, dict):
+        simple = mdl.get("aliases")
+        if isinstance(simple, dict):
+            for alias, val in simple.items():
+                if isinstance(val, str) and val.strip():
+                    v = val.strip()
+                    pfx, _, rest = v.partition("/")
+                    _put(rest or v, alias, pfx if rest else None)
+    return rmap
+
+
 # Merged dict (builtins + user config); populated by _load_direct_aliases()
 DIRECT_ALIASES: dict[str, DirectAlias] = {}
 
