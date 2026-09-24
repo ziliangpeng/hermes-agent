@@ -2130,6 +2130,27 @@ def _turn_started_at(session: dict | None) -> float | None:
     return float(inflight["started_at"]) if isinstance(inflight, dict) and inflight.get("started_at") else None
 
 
+def _profile_reverse_alias(profile_home, model_name: str) -> str:
+    """Shortest configured alias for ``model_name`` in the SESSION-OWNING profile's config.
+
+    ``cli._reverse_alias_for_display`` reads the ACTIVE profile via a process-lifetime
+    cache — correct for the single-profile CLI, wrong under gateway multiplex (a secondary
+    profile's request could render the launch profile's aliases). Read the owning profile's
+    file by path through the effective-config pipeline (same pattern as
+    ``_profile_configured_cwd``) and fail open to ``""``.
+    """
+    if not model_name:
+        return ""
+    with contextlib.suppress(Exception):
+        from cli import _reverse_alias_map_from_config
+        from hermes_cli.config_effective import load_user_config_effective
+        p = Path(profile_home) / "config.yaml" if profile_home else Path(_hermes_home) / "config.yaml"
+        if not p.exists():
+            return ""
+        return _reverse_alias_map_from_config(load_user_config_effective(p)).get(model_name, "")
+    return ""
+
+
 def _session_info(agent, session: dict | None = None) -> dict:
     if session is None:
         session = next((c for c in _sessions.values() if c.get("agent") is agent), None)
@@ -2165,6 +2186,10 @@ def _session_info(agent, session: dict | None = None) -> dict:
         with _profile_build_scope(sess.get("profile_home") or _hermes_home):
             provider = _runtime_model_config(agent).get("provider", provider)
     model = pending_model or mirror.get("model", getattr(agent, "model", ""))
+    # Display-only: the shortest configured alias for the resolved model, in the
+    # SESSION-OWNING profile's config ("" when none configured — clients fall back to
+    # their generic label). Never used to route requests.
+    model_alias = _profile_reverse_alias(sess.get("profile_home"), model)
     # The level the route's entry clamp actually sends (== reasoning_effort when verbatim), so the
     # Desktop can say "ultra sends max on this route" like `/reasoning` does instead of presenting a
     # Hermes-internal step (#61634) as a wire level the route does not have.
@@ -2173,6 +2198,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         reasoning_effort_wire = str(clamp_effort(reasoning_effort, route_supported_efforts(pending_provider or provider, model)) or "")
     info: dict = {
         "model": model,
+        "model_alias": model_alias,
         "provider": pending_provider or provider,
         "reasoning_effort": reasoning_effort, "reasoning_effort_wire": reasoning_effort_wire,
         "service_tier": service_tier, "fast": service_tier == "priority",

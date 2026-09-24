@@ -73,6 +73,10 @@ class SessionLiveInfo(OpenModel):
     ``session.create`` / ``session.resume`` / ``session.activate`` results."""
 
     model: str = ""
+    # Display-only: the shortest configured alias for ``model`` in the session-owning
+    # profile (``model.aliases:`` / ``model_aliases:``); "" when none — clients keep
+    # their generic label. Never used to route requests.
+    model_alias: str = ""
     provider: str = ""
     reasoning_effort: str = ""
     # The level the route's entry clamp actually sends for ``reasoning_effort`` ("" when unset/none;

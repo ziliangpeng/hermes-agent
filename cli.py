@@ -256,37 +256,47 @@ def format_duration_compact(*args, **kwargs):
 _REVERSE_ALIAS_CACHE: dict[str, str] | None = None
 
 
+def _reverse_alias_map_from_config(cfg: dict) -> dict[str, str]:
+    """``model id -> shortest alias`` from ``model_aliases:`` + ``model.aliases:``.
+
+    Pure data transform (no I/O) shared by the CLI status bar and the gateway's
+    ``model_alias`` wire field, so the two can't drift on resolution rules. Shortest
+    alias wins; ``custom:provider/model`` values key the bare model id (that is what
+    ``agent.model`` holds after a switch resolves the route).
+    """
+    rmap: dict[str, str] = {}
+
+    def _put(m: str, alias: str) -> None:
+        if m and (m not in rmap or len(alias) < len(rmap[m])):
+            rmap[m] = alias
+
+    ma = cfg.get("model_aliases")
+    if isinstance(ma, dict):
+        for alias, entry in ma.items():
+            if isinstance(entry, dict):
+                _put(str(entry.get("model", "") or "").strip(), alias)
+    mdl = cfg.get("model", {}) or {}
+    if isinstance(mdl, dict):
+        simple = mdl.get("aliases")
+        if isinstance(simple, dict):
+            for alias, val in simple.items():
+                if isinstance(val, str) and val.strip():
+                    v = val.strip()
+                    _put(v.split("/", 1)[1] if "/" in v else v, alias)
+    return rmap
+
+
 def _reverse_alias_for_display(model_name: str) -> str:
     """Shortest alias for ``model_name`` from ``model_aliases:`` or ``model.aliases:``, else ``model_name``."""
     global _REVERSE_ALIAS_CACHE
     if not model_name:
         return model_name
     if _REVERSE_ALIAS_CACHE is None:
-        rmap: dict[str, str] = {}
-
-        def _put(m: str, alias: str) -> None:
-            if m and (m not in rmap or len(alias) < len(rmap[m])):
-                rmap[m] = alias
-
         try:
             from hermes_cli.config import load_config
-            cfg = load_config() or {}
-            ma = cfg.get("model_aliases")
-            if isinstance(ma, dict):
-                for alias, entry in ma.items():
-                    if isinstance(entry, dict):
-                        _put(str(entry.get("model", "") or "").strip(), alias)
-            mdl = cfg.get("model", {}) or {}
-            if isinstance(mdl, dict):
-                simple = mdl.get("aliases")
-                if isinstance(simple, dict):
-                    for alias, val in simple.items():
-                        if isinstance(val, str) and val.strip():
-                            v = val.strip()
-                            _put(v.split("/", 1)[1] if "/" in v else v, alias)
+            _REVERSE_ALIAS_CACHE = _reverse_alias_map_from_config(load_config() or {})
         except Exception:
-            pass
-        _REVERSE_ALIAS_CACHE = rmap
+            _REVERSE_ALIAS_CACHE = {}
     return _REVERSE_ALIAS_CACHE.get(model_name, model_name)
 
 
