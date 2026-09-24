@@ -308,6 +308,7 @@ export const applyDisplay = (
     showReasoning: !!d.show_reasoning,
     statusBar: normalizeStatusBar(d.tui_statusbar),
     statusBarFields: normalizeStatusBarFields(d.status_bar?.fields),
+    statusBarCompact: d.status_bar?.compact === true,
     streaming: d.streaming !== false,
     // The SAME key that stamps [HH:MM] on classic-CLI labels (#41531) —
     // no separate TUI knob.

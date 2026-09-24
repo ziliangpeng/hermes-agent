@@ -582,3 +582,97 @@ describe('StatusRule perf read-outs (cache hit / latency / tps)', () => {
     expect(textContent(element)).not.toContain('weekly-digest')
   })
 })
+
+describe('StatusRule compact mode (#49)', () => {
+  const compactUsage = {
+    context_max: 921_600,
+    context_percent: 25,
+    context_threshold_tokens: 783_360,
+    context_used: 391_680,
+    memory_used_chars: 3_520,
+    memory_max_chars: 35_200,
+    skill_count: 41,
+    user_used_chars: 660,
+    user_max_chars: 22_000,
+    total: 391_680
+  }
+
+  it('renders the threshold-relative bar + M%/U%/S and the single-glyph idle status', () => {
+    // 391,680 / 783,360 = exactly 50% of the way to compression.
+    // M = 3,520/35,200 = 10%, U = 660/22,000 = 3% (rounds to 3), S = 41.
+    const text = textContent(
+      StatusRule({ ...baseProps, cols: 120, statusBarCompact: true, usage: compactUsage })
+    )
+
+    expect(text).toContain('██░░ 50%')
+    expect(text).toContain('M10 U3 S41')
+    // The absolute token read-out stays behind context_detail.
+    expect(text).not.toContain('391k/921k')
+    // Idle collapses to the single glyph, not the `ready` word.
+    expect(text).toContain('◉')
+    expect(text).not.toContain('ready')
+  })
+
+  it('shows the absolute token count only with context_detail on', () => {
+    const text = textContent(
+      StatusRule({
+        ...baseProps,
+        cols: 120,
+        statusBarCompact: true,
+        statusBarFields: new Set(['model', 'context_pct', 'context_detail']),
+        usage: compactUsage
+      })
+    )
+
+    expect(text).toContain('██░░ 50%')
+    expect(text).toContain('391.7k')
+  })
+
+  it('obeys the memory fields gate for the occupancy segment', () => {
+    const text = textContent(
+      StatusRule({
+        ...baseProps,
+        cols: 120,
+        statusBarCompact: true,
+        statusBarFields: new Set(['model', 'context_pct']),
+        usage: compactUsage
+      })
+    )
+
+    expect(text).not.toContain('M10')
+    expect(text).not.toContain('S41')
+    // The context bar is NOT part of the memory gate.
+    expect(text).toContain('██░░ 50%')
+  })
+
+  it('self-hides occupancy parts with nothing to show', () => {
+    const text = textContent(
+      StatusRule({
+        ...baseProps,
+        cols: 120,
+        statusBarCompact: true,
+        usage: { context_threshold_tokens: 783_360, context_used: 391_680, total: 391_680 }
+      })
+    )
+
+    // No memory store, no skills → no M/U/S segment at all.
+    expect(text).not.toContain('M0')
+    expect(text).not.toContain('S0')
+    expect(text).toContain('██░░ 50%')
+  })
+
+  it('falls back to the legacy label before the first turn (context_used 0)', () => {
+    // A fresh session has context_used = 0 — the bar must render 0%, not
+    // bounce between styles once the first message lands.
+    const text = textContent(
+      StatusRule({
+        ...baseProps,
+        cols: 120,
+        statusBarCompact: true,
+        usage: { context_max: 921_600, context_threshold_tokens: 783_360, context_used: 0, total: 0 }
+      })
+    )
+
+    expect(text).toContain('░░░░ 0%')
+  })
+})

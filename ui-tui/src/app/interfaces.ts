@@ -361,6 +361,10 @@ export interface UiState {
   // shared with the classic CLI bar. null = user has not customized (show
   // the default set).
   statusBarFields: null | ReadonlySet<string>
+  // display.status_bar.compact — density-first status rule: 4-char context bar
+  // read against the compression threshold, M%/U%/S segment, single-glyph idle
+  // status. false = upstream default rendering.
+  statusBarCompact: boolean
   streaming: boolean
   theme: Theme
   // `display.timestamps` — dim [HH:MM] labels on user/assistant transcript

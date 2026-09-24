@@ -35,6 +35,7 @@ const buildUiState = (): UiState => ({
   statusBar: 'top',
   storedSid: null,
   statusBarFields: null,
+  statusBarCompact: false,
   streaming: true,
   timestamps: false,
   // Last session's resolved theme paints frame one (flash-free boot, like

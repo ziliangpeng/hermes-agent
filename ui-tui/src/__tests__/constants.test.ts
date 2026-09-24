@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { FACES } from '../content/faces.js'
 import { HOTKEYS } from '../content/hotkeys.js'
 import { PLACEHOLDERS } from '../content/placeholders.js'
-import { TOOL_VERBS, VERBS } from '../content/verbs.js'
+import { VERBS } from '../content/verbs.js'
 import { ROLE } from '../domain/roles.js'
 import { ZERO } from '../domain/usage.js'
 import { INTERPOLATION_RE } from '../protocol/interpolation.js'
@@ -30,11 +30,6 @@ describe('constants', () => {
     const hotkey = HOTKEYS.find(([k]) => k.endsWith('+L'))
     expect(hotkey).toBeDefined()
     expect(hotkey?.[1]).toBe('redraw / repaint')
-  })
-
-  it('TOOL_VERBS maps known tools (verb-only, no emoji)', () => {
-    expect(TOOL_VERBS.terminal).toBe('terminal')
-    expect(TOOL_VERBS.read_file).toBe('reading')
   })
 
   it('INTERPOLATION_RE matches {!cmd}', () => {

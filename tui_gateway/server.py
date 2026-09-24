@@ -3,6 +3,7 @@ import concurrent.futures
 import contextlib
 import contextvars
 import copy
+import re
 import hashlib
 import importlib
 import inspect  # noqa: F401  (split modules)
@@ -1972,6 +1973,54 @@ def _get_usage(agent) -> dict:
         from agent.context_breakdown import context_usage_fields
         usage.update(context_usage_fields(comp))
         usage["compressions"] = getattr(comp, "compression_count", 0) or 0
+        # Compression trigger point (threshold_tokens = context_length × threshold_percent).
+        # The status bar's compact context read-out uses this as its denominator so the
+        # percentage reflects distance-to-compression, not distance-to-the-model hard cap.
+        with contextlib.suppress(Exception):
+            _threshold = int(getattr(comp, "threshold_tokens", 0) or 0)
+            if _threshold > 0:
+                usage["context_threshold_tokens"] = _threshold
+    # Memory / user-profile / skills context occupancy (compact status-bar segment).
+    # Memory percent reads against the STORE'S OWN CHAR LIMIT (35.2k/22k here), not
+    # the context window — a 3k-char MEMORY.md is ~9% of its budget but ~0% of a
+    # 921k-token window, so the window denominator would round it to invisible.
+    # Omitted (not fabricated) when the agent has no memory store or no data yet.
+    # Fail-open by design, but leave a debug breadcrumb: this imports a private
+    # upstream helper (_memory_blocks); a silent ImportError after a rebase would
+    # otherwise make the M%/U% segment vanish with no trace.
+    try:
+        from agent.context_breakdown import _memory_blocks
+    except Exception as exc:
+        logger.debug("compact status-bar: context_breakdown import failed: %s", exc)
+    else:
+        with contextlib.suppress(Exception):
+            _store = getattr(agent, "_memory_store", None)
+            memory_block, user_block = _memory_blocks(agent)
+            if memory_block:
+                _mlimit = int(getattr(_store, "memory_char_limit", 0) or 0)
+                if _mlimit > 0:
+                    usage["memory_max_chars"] = _mlimit
+                    usage["memory_used_chars"] = len(memory_block)
+            if user_block:
+                _ulimit = int(getattr(_store, "user_char_limit", 0) or 0)
+                if _ulimit > 0:
+                    usage["user_max_chars"] = _ulimit
+                    usage["user_used_chars"] = len(user_block)
+    # Skill count from the live skills index block of the system prompt — the same
+    # list the model sees, so disabled/hidden skills are not counted. The line
+    # format ("- name: description") is owned by the prompt builder; if that
+    # format changes this count quietly degrades, so keep the format-stable test
+    # in test_usage_compact_fields.py in sync.
+    with contextlib.suppress(Exception):
+        _skills_m = re.search(
+            r"<available_skills>(.*?)</available_skills>", getattr(agent, "_cached_system_prompt", "") or "", re.DOTALL
+        )
+        if _skills_m:
+            _count = sum(
+                1 for ln in _skills_m.group(1).splitlines() if ln.strip().startswith(("-", "•", "*"))
+            )
+            if _count > 0:
+                usage["skill_count"] = _count
     # Cache-hit ratio + rolling latency/tps (CLI status-bar parity). Omitted, not fabricated, when there is no
     # data (Codex reports no latency; zero cache reads shows no hit% rather than an alarming 0).
     with contextlib.suppress(Exception):

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import stringWidth from 'string-width'
+
 import type { StatusBarSegments } from '../components/appChrome.js'
 import { busyIndicatorWidth, statusBarSegments, statusRuleWidths } from '../components/appChrome.js'
 
@@ -116,11 +118,14 @@ describe('statusBarSegments', () => {
 })
 
 describe('busyIndicatorWidth', () => {
-  it('reserves a bare spinner for the verb-less unicode style', () => {
-    // unicode is a 1-col braille spinner with no verb; far slimmer than the
-    // kaomoji face which carries a wide glyph + rotating verb.
-    expect(busyIndicatorWidth('unicode', false)).toBeLessThan(busyIndicatorWidth('kaomoji', false))
+  it('reserves the frozen-verb pad only while compacting (unicode style)', () => {
+    // unicode is a 1-col braille spinner. Outside compaction it reserves just
+    // the frame; the frozen ` compacting` override adds its width only when
+    // compaction is actually running — an unconditional reserve would burn 11
+    // columns of tail budget the whole turn.
     expect(busyIndicatorWidth('unicode', false)).toBe(1)
+    expect(busyIndicatorWidth('unicode', false, true)).toBe(1 + stringWidth(' compacting'))
+    expect(busyIndicatorWidth('unicode', false)).toBeLessThan(busyIndicatorWidth('kaomoji', false))
   })
 
   it('reserves room for the elapsed-time tail only when a turn is timed', () => {
