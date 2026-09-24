@@ -1980,16 +1980,26 @@ def _get_usage(agent) -> dict:
             if _threshold > 0:
                 usage["context_threshold_tokens"] = _threshold
     # Memory / user-profile / skills context occupancy (compact status-bar segment).
-    # Same source the /context breakdown uses; omitted (not fabricated) when the agent
-    # has no memory store or no data yet. Cheap: category tokens are already computed
-    # by compute_session_context_breakdown — here we only read the store blocks.
+    # Memory percent reads against the STORE'S OWN CHAR LIMIT (35.2k/22k here), not
+    # the context window — a 3k-char MEMORY.md is ~9% of its budget but ~0% of a
+    # 921k-token window, so the window denominator would round it to invisible.
+    # Omitted (not fabricated) when the agent has no memory store or no data yet.
     with contextlib.suppress(Exception):
         from agent.context_breakdown import _memory_blocks, _chars_to_tokens
+        _store = getattr(agent, "_memory_store", None)
         memory_block, user_block = _memory_blocks(agent)
         if memory_block:
             usage["memory_tokens"] = _chars_to_tokens(memory_block)
+            _mlimit = int(getattr(_store, "memory_char_limit", 0) or 0)
+            if _mlimit > 0:
+                usage["memory_max_chars"] = _mlimit
+                usage["memory_used_chars"] = len(memory_block)
         if user_block:
             usage["user_tokens"] = _chars_to_tokens(user_block)
+            _ulimit = int(getattr(_store, "user_char_limit", 0) or 0)
+            if _ulimit > 0:
+                usage["user_max_chars"] = _ulimit
+                usage["user_used_chars"] = len(user_block)
     # Skill count from the live skills index block of the system prompt — the same
     # list the model sees, so disabled/hidden skills are not counted.
     with contextlib.suppress(Exception):

@@ -23,9 +23,6 @@ import { scrollbarColors } from './overlayPrimitives.js'
 const FACE_TICK_MS = 2500
 const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
 
-// Keep verb segment width stable so status-bar content to the right doesn't
-// jitter when the ticker rotates between short/long verbs.
-
 // Compact alternates for the `emoji` and `ascii` indicator styles.
 // Each entry is a fixed-width (display-width) glyph.
 const EMOJI_FRAMES = ['☤ ', '🌀', '🤔', '✨', '🍵', '🔮']
@@ -38,23 +35,17 @@ const SPINNER_TICK_MS = 100
 interface IndicatorRender {
   frame: string
   intervalMs: number
-  // When false, FaceTicker hides the rotating verb and just shows the
-  // glyph + duration.  Lets `unicode` stay minimal while the other
-  // styles keep the verb-rotation flavour users associate with the
-  // running… status.
-  showVerb: boolean
 }
 
 const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender => {
   if (style === 'kaomoji') {
-    return { frame: FACES[tick % FACES.length] ?? '', intervalMs: FACE_TICK_MS, showVerb: true }
+    return { frame: FACES[tick % FACES.length] ?? '', intervalMs: FACE_TICK_MS }
   }
 
   if (style === 'emoji') {
     return {
       frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? '☤ ',
       intervalMs: SPINNER_TICK_MS * 6,
-      showVerb: true
     }
   }
 
@@ -62,7 +53,6 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
     return {
       frame: ASCII_FRAMES[tick % ASCII_FRAMES.length] ?? '|',
       intervalMs: SPINNER_TICK_MS,
-      showVerb: true
     }
   }
 
@@ -73,7 +63,7 @@ const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender =
   const spinner = unicodeSpinners.braille
   const frame = spinner.frames[tick % spinner.frames.length] ?? '⠋'
 
-  return { frame, intervalMs: Math.max(SPINNER_TICK_MS, spinner.interval), showVerb: false }
+  return { frame, intervalMs: Math.max(SPINNER_TICK_MS, spinner.interval) }
 }
 
 // `FACES` / `EMOJI_FRAMES` are static, so measure their widest glyph once at
@@ -103,17 +93,17 @@ export const MAX_DURATION_WIDTH = Math.max(
   stringWidth(fmtDuration(99 * 3_600_000 + 59 * 60_000)) // "99h 59m"
 )
 
-// Display width to reserve for the busy indicator so its verb + elapsed-time
-// tail can't shove the model off-screen on narrow terminals. Style-aware:
-// `unicode` is a bare 1-col braille spinner with no verb, while kaomoji/emoji/
-// ascii add a fixed-width verb; any style adds a bounded elapsed-time tail.
-// Mirrors FaceTicker's `frame + verbSegment + durationSegment` layout.
+// Display width to reserve for the busy indicator so its elapsed-time tail
+// can't shove the model off-screen on narrow terminals. Style-aware: `unicode`
+// is a bare 1-col braille spinner, kaomoji/emoji/ascii are wider. A frozen
+// verb override (`compacting`) may append to the frame — reserve for the
+// longest one so it never squeezes the pinned essentials.
+const FROZEN_VERB_WIDTH = stringWidth(' compacting')
 export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
-  // ` ` plus the bounded clock (e.g. `59m 59s`). The verb carousel is gone;
-  // a frozen override like `compacting` is short and bounded by the pad.
+  // ` ` plus the bounded clock (e.g. `59m 59s`).
   const duration = hasDuration ? stringWidth(' ') + MAX_DURATION_WIDTH : 0
 
-  return indicatorFrameWidth(style) + duration
+  return indicatorFrameWidth(style) + FROZEN_VERB_WIDTH + duration
 }
 
 function FaceTicker({
@@ -659,18 +649,19 @@ export function StatusRule({
   const tpsText = typeof usage.avg_tps === 'number' ? `↑ ${Math.round(usage.avg_tps)} t/s` : ''
   const showTps = segs.tps && ok('tps') && !!tpsText && fits(SEP + stringWidth(tpsText))
 
-  // Compact M%/U%/S segment — memory / user-profile occupancy of the context
-  // window (percent of context_threshold_tokens; falls back to context_max)
-  // and the live skill count. Self-hides per-part when there is nothing to
-  // show (no memory store, no skills) and obeys the `memory` fields gate.
-  const occupancyDenom = usage.context_threshold_tokens ?? usage.context_max
+  // Compact M%/U%/S segment — memory / user-profile occupancy. M% and U% read
+  // against the STORE'S OWN char limit (memory_char_limit / user_char_limit),
+  // not the context window: a filled MEMORY.md is ~9% of its 35k budget but
+  // rounds to 0% of a 921k-token window. S is the live skill count. Parts
+  // self-hide when there is nothing to show and the segment obeys the `memory`
+  // fields gate.
   const memoryPct =
-    usage.memory_tokens != null && occupancyDenom
-      ? Math.max(0, Math.min(100, Math.round((usage.memory_tokens / occupancyDenom) * 100)))
+    usage.memory_used_chars != null && usage.memory_max_chars
+      ? Math.max(0, Math.min(100, Math.round((usage.memory_used_chars / usage.memory_max_chars) * 100)))
       : undefined
   const userPct =
-    usage.user_tokens != null && occupancyDenom
-      ? Math.max(0, Math.min(100, Math.round((usage.user_tokens / occupancyDenom) * 100)))
+    usage.user_used_chars != null && usage.user_max_chars
+      ? Math.max(0, Math.min(100, Math.round((usage.user_used_chars / usage.user_max_chars) * 100)))
       : undefined
   const musParts: string[] = []
 
@@ -782,7 +773,7 @@ export function StatusRule({
             <Text color={t.color.muted} wrap="truncate-end">
               {' │ '}
               {statusBarCompact && thresholdPct != null ? (
-                <Text color={barColor}>{compactCtxText}</Text>
+                <Text color={ctxBarColor(thresholdPct, t)}>{compactCtxText}</Text>
               ) : (
                 compactCtxText
               )}

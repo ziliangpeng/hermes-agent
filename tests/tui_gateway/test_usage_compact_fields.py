@@ -1,14 +1,16 @@
 """Behavior-contract tests for _get_usage's compact status-bar fields.
 
 Regression for #49 (compact status bar): the usage payload exposes
-`context_threshold_tokens`, `memory_tokens`, `user_tokens`, and `skill_count`.
-Contracts verified (not snapshots):
+`context_threshold_tokens`, `memory_tokens`/`user_tokens` (token estimate) plus
+`memory_used_chars`/`memory_max_chars`/`user_used_chars`/`user_max_chars`
+(char occupancy vs the STORE'S OWN limit — the M%/U% denominator), and
+`skill_count`. Contracts verified (not snapshots):
 
 - threshold: present iff the compressor exposes a positive threshold_tokens;
   equals the compressor's value (the compact bar's denominator = compression
   trigger point, not the model hard cap).
-- memory/user: present iff the corresponding store block is non-empty; the
-  value is the same chars→tokens estimate the /context breakdown uses.
+- memory/user: token fields present iff the store block is non-empty; char
+  fields additionally require a positive store char limit.
 - skills: counts the entries in the agent's live <available_skills> block
   (what the model sees), omitted when the agent has no skills index.
 - nothing here may raise when the agent is a bare stub (fail-open contract
@@ -22,8 +24,10 @@ from tui_gateway.server import _get_usage
 
 
 class _StubStore:
-    def __init__(self, memory_block="", user_block=""):
+    def __init__(self, memory_block="", user_block="", memory_char_limit=35200, user_char_limit=22000):
         self._blocks = {"memory": memory_block, "user": user_block}
+        self.memory_char_limit = memory_char_limit
+        self.user_char_limit = user_char_limit
 
     def format_for_system_prompt(self, kind):
         return self._blocks.get(kind) or ""
@@ -81,16 +85,38 @@ class TestMemoryUserTokens:
         # Same estimator as the /context breakdown: identical input → identical tokens.
         assert usage["memory_tokens"] > usage["user_tokens"]
 
+    def test_char_occupancy_reads_against_store_limit(self):
+        agent = _agent(_memory_store=_StubStore(memory_block="M" * 3520, user_block="U" * 1100))
+        usage = _get_usage(agent)
+        # 3,520 / 35,200 = 10% of the memory budget — visible, unlike % of a
+        # 921k-token context window which rounds to zero.
+        assert usage["memory_used_chars"] == 3520
+        assert usage["memory_max_chars"] == 35200
+        assert usage["user_used_chars"] == 1100
+        assert usage["user_max_chars"] == 22000
+
+    def test_char_fields_omitted_without_store_limit(self):
+        store = _StubStore(memory_block="M" * 100, memory_char_limit=0, user_char_limit=0)
+        agent = _agent(_memory_store=store)
+        usage = _get_usage(agent)
+        assert "memory_used_chars" not in usage
+        assert "user_used_chars" not in usage
+        # token estimate still present — it does not need a limit
+        assert (usage.get("memory_tokens") or 0) > 0
+
     def test_omitted_when_store_empty(self):
         agent = _agent(_memory_store=_StubStore())
         usage = _get_usage(agent)
         assert "memory_tokens" not in usage
         assert "user_tokens" not in usage
+        assert "memory_used_chars" not in usage
+        assert "user_used_chars" not in usage
 
     def test_omitted_when_no_store(self):
         usage = _get_usage(_agent())
         assert "memory_tokens" not in usage
         assert "user_tokens" not in usage
+        assert "memory_used_chars" not in usage
 
 
 class TestSkillCount:

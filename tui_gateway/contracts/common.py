@@ -34,6 +34,12 @@ class Usage(OpenModel):
     memory_tokens: int | None = None
     user_tokens: int | None = None
     skill_count: int | None = None
+    # Char-level memory/user occupancy vs the STORE'S OWN limit — the compact
+    # M%/U% denominator (see _get_usage).
+    memory_used_chars: int | None = None
+    memory_max_chars: int | None = None
+    user_used_chars: int | None = None
+    user_max_chars: int | None = None
     context_percent: int | None = None
     context_source: str | None = None
     context_estimated: bool | None = None

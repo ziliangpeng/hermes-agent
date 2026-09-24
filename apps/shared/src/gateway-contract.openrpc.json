@@ -27377,6 +27377,54 @@
             "default": null,
             "title": "Skill Count"
           },
+          "memory_used_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Used Chars"
+          },
+          "memory_max_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Max Chars"
+          },
+          "user_used_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Used Chars"
+          },
+          "user_max_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Max Chars"
+          },
           "context_percent": {
             "anyOf": [
               {
@@ -31640,6 +31688,54 @@
             ],
             "default": null,
             "title": "Skill Count"
+          },
+          "memory_used_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Used Chars"
+          },
+          "memory_max_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Memory Max Chars"
+          },
+          "user_used_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Used Chars"
+          },
+          "user_max_chars": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Max Chars"
           },
           "context_percent": {
             "anyOf": [

@@ -2286,7 +2286,21 @@ display:
     fields: ["model", "duration", "total_tokens"]   # visibility only; built-in order is preserved
 ```
 
-Supported fields: `model`, `context_detail` (used/total tokens), `context_pct` (percent + meter), `cache_hit` (prompt cache hit ratio — resets on model switch and compression), `latency` (rolling mean API latency, last 10 calls), `tps` (rolling output tokens/sec, last 10 calls), `compressions`, `bg_tasks`, `bg_processes`, `bg_subagents`, `goal`, `git_branch` (⎇ current git branch of the working directory — opt-in only, never shown by default; detached HEAD shows the abbreviated commit), `duration`, `prompt_elapsed`, `idle_since`, `focus`, `yolo`, `stash`, `battery`, `title` (right-aligned session badge), and `total_tokens` (session Σ — opt-in only, never shown by default).
+Supported fields: `model`, `context_detail` (used/total tokens), `context_pct` (percent + meter), `cache_hit` (prompt cache hit ratio — resets on model switch and compression), `latency` (rolling mean API latency, last 10 calls), `tps` (rolling output tokens/sec, last 10 calls), `compressions`, `memory` (compact mode only — the M%/U%/S occupancy segment), `bg_tasks`, `bg_processes`, `bg_subagents`, `goal`, `git_branch` (⎇ current git branch of the working directory — opt-in only, never shown by default; detached HEAD shows the abbreviated commit), `duration`, `prompt_elapsed`, `idle_since`, `focus`, `yolo`, `stash`, `battery`, `title` (right-aligned session badge), and `total_tokens` (session Σ — opt-in only, never shown by default).
+
+### Compact status bar (TUI)
+
+`display.status_bar.compact` (default `false`) switches the Ink TUI's status rule to a density-first layout, designed for monitoring many agents at a glance:
+
+```yaml
+display:
+  status_bar:
+    compact: true
+```
+
+- **Context**: `██░░ 78%` — a 4-char bar plus percent read against the **compression threshold** (where the context compressor actually fires), not the model's hard cap. The number is "how close to compaction", which is what you plan around. The absolute token count appears only when `context_detail` is also enabled.
+- **Occupancy**: `M9 U3 S41` — memory / user-profile percent of **their own char budgets** (`memory.memory_char_limit` / `memory.user_char_limit`) plus the live skill count. Parts with nothing to show self-hide; the whole segment obeys the `memory` field above.
+- **Status**: idle collapses to a single glyph (`◉`, theme green); busy shows the indicator frame + elapsed time (no rotating verb). The frozen `compacting` verb still appears during context compression.
 
 Notes:
 
