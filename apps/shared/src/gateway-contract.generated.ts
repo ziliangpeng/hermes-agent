@@ -597,6 +597,10 @@ export interface Usage {
   memory_tokens?: number | null
   user_tokens?: number | null
   skill_count?: number | null
+  memory_used_chars?: number | null
+  memory_max_chars?: number | null
+  user_used_chars?: number | null
+  user_max_chars?: number | null
   context_percent?: number | null
   context_source?: string | null
   context_estimated?: boolean | null
@@ -3519,6 +3523,10 @@ export interface SessionUsageResult {
   memory_tokens?: number | null
   user_tokens?: number | null
   skill_count?: number | null
+  memory_used_chars?: number | null
+  memory_max_chars?: number | null
+  user_used_chars?: number | null
+  user_max_chars?: number | null
   context_percent?: number | null
   context_source?: string | null
   context_estimated?: boolean | null
