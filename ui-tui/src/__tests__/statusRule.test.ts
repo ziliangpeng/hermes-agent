@@ -118,11 +118,14 @@ describe('statusBarSegments', () => {
 })
 
 describe('busyIndicatorWidth', () => {
-  it('reserves the frozen-verb pad for the unicode style so `compacting` never squeezes essentials', () => {
-    // unicode is a 1-col braille spinner; the reserved width covers frame +
-    // the frozen `compacting` override that appears during compression.
+  it('reserves the frozen-verb pad only while compacting (unicode style)', () => {
+    // unicode is a 1-col braille spinner. Outside compaction it reserves just
+    // the frame; the frozen ` compacting` override adds its width only when
+    // compaction is actually running — an unconditional reserve would burn 11
+    // columns of tail budget the whole turn.
+    expect(busyIndicatorWidth('unicode', false)).toBe(1)
+    expect(busyIndicatorWidth('unicode', false, true)).toBe(1 + stringWidth(' compacting'))
     expect(busyIndicatorWidth('unicode', false)).toBeLessThan(busyIndicatorWidth('kaomoji', false))
-    expect(busyIndicatorWidth('unicode', false)).toBe(1 + stringWidth(' compacting'))
   })
 
   it('reserves room for the elapsed-time tail only when a turn is timed', () => {

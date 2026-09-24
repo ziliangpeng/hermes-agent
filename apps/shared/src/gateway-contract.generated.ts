@@ -640,8 +640,6 @@ export interface Usage {
   context_used?: number | null
   context_max?: number | null
   context_threshold_tokens?: number | null
-  memory_tokens?: number | null
-  user_tokens?: number | null
   skill_count?: number | null
   memory_used_chars?: number | null
   memory_max_chars?: number | null
@@ -2820,8 +2818,6 @@ export interface SessionUsageResult {
   context_used?: number | null
   context_max?: number | null
   context_threshold_tokens?: number | null
-  memory_tokens?: number | null
-  user_tokens?: number | null
   skill_count?: number | null
   memory_used_chars?: number | null
   memory_max_chars?: number | null

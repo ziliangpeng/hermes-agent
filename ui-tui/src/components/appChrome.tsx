@@ -95,15 +95,20 @@ export const MAX_DURATION_WIDTH = Math.max(
 
 // Display width to reserve for the busy indicator so its elapsed-time tail
 // can't shove the model off-screen on narrow terminals. Style-aware: `unicode`
-// is a bare 1-col braille spinner, kaomoji/emoji/ascii are wider. A frozen
-// verb override (`compacting`) may append to the frame — reserve for the
-// longest one so it never squeezes the pinned essentials.
+// is a bare 1-col braille spinner, kaomoji/emoji/ascii are wider. The frozen
+// `compacting` verb override is reserved ONLY while compacting — reserving it
+// unconditionally would burn 11 columns of tail budget the whole turn.
 const FROZEN_VERB_WIDTH = stringWidth(' compacting')
-export const busyIndicatorWidth = (style: IndicatorStyle, hasDuration: boolean): number => {
+export const busyIndicatorWidth = (
+  style: IndicatorStyle,
+  hasDuration: boolean,
+  compacting = false
+): number => {
   // ` ` plus the bounded clock (e.g. `59m 59s`).
   const duration = hasDuration ? stringWidth(' ') + MAX_DURATION_WIDTH : 0
+  const verb = compacting ? FROZEN_VERB_WIDTH : 0
 
-  return indicatorFrameWidth(style) + FROZEN_VERB_WIDTH + duration
+  return indicatorFrameWidth(style) + verb + duration
 }
 
 function FaceTicker({
@@ -251,6 +256,10 @@ function ctxBar(pct: number | undefined, w = 10) {
 // Compact 4-char half-block bar (8-level resolution). At least one cell stays
 // visible from 5% occupancy up; 0% renders all-empty. Same visual contract as
 // the fork's PR #30, applied to the threshold-relative percentage.
+// Width note: the half-block glyphs (U+2588/258C/2591) are East-Asian
+// AMBIGUOUS width — on ambiguous=wide terminals they render 2 cells each. The
+// upstream ctxBar() already relies on the same family (█/░), so this follows
+// the status quo; if a CJK-wide terminal misaligns, switch both to ASCII.
 export function compactCtxBar(pct: number): string {
   const p = Math.max(0, Math.min(100, pct))
   const eighths = p > 0 ? Math.max(1, Math.round((p / 100) * 8)) : 0
@@ -543,7 +552,7 @@ export function StatusRule({
   // token count is dropped unless `context_detail` is on (same gate as the
   // detail read-out above).
   const thresholdPct =
-    usage.context_threshold_tokens && usage.context_used
+    usage.context_threshold_tokens != null && usage.context_used != null
       ? Math.max(0, Math.min(100, Math.round((usage.context_used / usage.context_threshold_tokens) * 100)))
       : undefined
   const compactCtxLabel =
@@ -581,7 +590,7 @@ export function StatusRule({
   // (kaomoji is wide + verb; unicode is a bare 1-col spinner). When a notice
   // occupies the slot it reserves only `noticeReserve` (it shrinks/truncates).
   const slotWidth = busy
-    ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null)
+    ? busyIndicatorWidth(indicatorStyle, turnStartedAt != null, compacting)
     : showNotice
       ? noticeReserve
       : stringWidth(status)

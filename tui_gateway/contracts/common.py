@@ -31,8 +31,6 @@ class Usage(OpenModel):
     # Compact status-bar (#49): threshold the ContextCompressor actually fires
     # at (context bar % denominator), plus memory/user/skills occupancy.
     context_threshold_tokens: int | None = None
-    memory_tokens: int | None = None
-    user_tokens: int | None = None
     skill_count: int | None = None
     # Char-level memory/user occupancy vs the STORE'S OWN limit — the compact
     # M%/U% denominator (see _get_usage).

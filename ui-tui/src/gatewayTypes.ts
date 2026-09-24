@@ -259,7 +259,6 @@ export interface SessionUsageResponse {
   cost_usd?: number
   credits_lines?: string[]
   input?: number
-  memory_tokens?: number
   model?: string
   output?: number
   skill_count?: number
