@@ -2,7 +2,7 @@
   {
     "id": "windows-launcher-self-lock",
     "title": "Released Windows updater locks its own console launcher",
-    "commits": ["a370ab8391ca5f8de7ebbc449f05cb0df36ade7c", "86960cdbb0148145890e2ee90b4e157fa899f6e1"],
+    "commits": ["a370ab8391ca5f8de7ebbc449f05cb0df36ade7c", "86960cdbb0148145890e2ee90b4e157fa899f6e1", "1af2e18d408a9dcc2c61d6fc1eef5c6667f8e254"],
     "cases": [["installer-script", "hermes-update"]],
     "errors": ["^E2E ASSERTION FAILED: hermes update exited [1-9][0-9]* \\(expected 0\\)$"],
     "log": "update",
