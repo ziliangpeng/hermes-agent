@@ -28,6 +28,22 @@ describe('known install failures', () => {
     expect(matchKnownFailure({ ...base, logs: { update: lockedLog.replace('(os error 5)', '(os error 32)') } })).toBeNull()
   })
 
+  it('recognizes the self-lock when the ZIP fallback is rate-limited before its install', () => {
+    const zip429Log = [
+      'error: failed to remove file `C:/install/venv/Lib/site-packages/../../Scripts/hermes.exe`: Access is denied. (os error 5)',
+      "⚠ Git update failed: Command '['uv', 'pip', 'install', '-e', '.', '--quiet']' returned non-zero exit status 2.",
+      '→ Falling back to ZIP download...',
+      '✗ ZIP update failed: HTTP Error 429: Too Many Requests',
+    ].join('\n')
+    const sample = { ...base, logs: { update: zip429Log } }
+
+    expect(matchKnownFailure(sample)?.id).toBe('windows-launcher-self-lock-zip-429')
+    expect(matchKnownFailure({ ...sample, logs: { update: zip429Log.replace('HTTP Error 429', 'HTTP Error 404') } })).toBeNull()
+    expect(matchKnownFailure({ ...sample, logs: { update: zip429Log.replaceAll('hermes.exe', 'other.exe') } })).toBeNull()
+    expect(matchKnownFailure({ ...sample, logs: { update: '✗ ZIP update failed: HTTP Error 429: Too Many Requests' } })).toBeNull()
+    expect(matchKnownFailure({ ...sample, commit: 'f'.repeat(40) })).toBeNull()
+  })
+
   it.each([
     { platform: 'linux' }, { phase: 'install' }, { commit: 'v2026.3.12' },
     { commit: 'f'.repeat(40) }, { installMethod: 'desktop-installer@latest' },

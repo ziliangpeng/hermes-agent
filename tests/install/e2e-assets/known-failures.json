@@ -11,6 +11,17 @@
     "evidence": "https://github.com/ethernet8023/hermes-agent/actions/runs/34055462305/job/101546487700"
   },
   {
+    "id": "windows-launcher-self-lock-zip-429",
+    "title": "Released Windows updater locks its own console launcher; ZIP fallback rate-limited",
+    "commits": ["a370ab8391ca5f8de7ebbc449f05cb0df36ade7c", "86960cdbb0148145890e2ee90b4e157fa899f6e1", "1af2e18d408a9dcc2c61d6fc1eef5c6667f8e254"],
+    "cases": [["installer-script", "hermes-update"]],
+    "errors": ["^E2E ASSERTION FAILED: hermes update exited [1-9][0-9]* \\(expected 0\\)$"],
+    "log": "update",
+    "signatures": ["failed to remove file[^\\r\\n]*Scripts[/\\\\]hermes\\.exe[^\\r\\n]*Access is denied\\. \\(os error 5\\)", "Git update failed:[^\\r\\n]*pip[^\\r\\n]*install[^\\r\\n]*returned non-zero exit status 2", "ZIP update failed: HTTP Error 429"],
+    "explanation": "Same launcher self-lock as windows-launcher-self-lock: the March/April updater runs from hermes.exe, so uv cannot replace it. Its ZIP fallback downloads from upstream GitHub and was rate-limited (HTTP 429) before it reached the second locked install, so no traceback was printed. The update target cannot change that loaded code.",
+    "evidence": "https://github.com/ziliangpeng/hermes-agent/actions/runs/40701958684/job/122864427365"
+  },
+  {
     "id": "windows-july-manual-app-update",
     "title": "July script installs offer a manual update instead of an app hand-off",
     "commits": ["7c1a029553d87c43ecff8a3821336bc95872213b"],

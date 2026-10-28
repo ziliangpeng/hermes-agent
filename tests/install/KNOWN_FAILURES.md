@@ -19,6 +19,8 @@ Evidence required: the CLI update phase failed, the traceback identifies the run
 
 The March call is in the released `hermes_cli/main.py:1678-1683`, with the ZIP fallback at `1571-1576`. April calls `_install_python_dependencies_with_optional_fallback`, whose released body at `3295-3321` runs the installs without launcher quarantine. Those function objects were loaded before the checkout changed. May's sampled CLI update passed; do not classify it from this record.
 
+Rate-limited ZIP fallback variant (`windows-launcher-self-lock-zip-429`): the old ZIP fallback downloads `main.zip` from upstream GitHub. When GitHub answers `HTTP Error 429`, the fallback stops before its second locked install, so no `hermes.exe/__main__.py` traceback is printed. This variant requires the same OS error 5 on `Scripts/hermes.exe`, the `Git update failed: ... pip install ... exit status 2` line, and `ZIP update failed: HTTP Error 429`. Any other ZIP failure stays red. Seen in [122864427365](https://github.com/ziliangpeng/hermes-agent/actions/runs/40701958684/job/122864427365) and [119234478329](https://github.com/ziliangpeng/hermes-agent/actions/runs/39603685911/job/119234478329).
+
 Re-running the installer is a separate tested upgrade route. Invoking the old CLI through its venv Python is a possible recovery route, but is not silently substituted for the console-launcher leg.
 
 ## July Windows app offers only a manual update for script installs
