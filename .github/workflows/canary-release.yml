@@ -12,8 +12,7 @@ name: Canary Release
 # conclusion=failure is a canary failure signal.
 
 on:
-  schedule:
-    - cron: "41 6 * * *" # daily, 06:41 UTC
+  # Fork: no schedule (upstream blacksmith runners are unavailable here).
   workflow_dispatch:
 
 permissions:
